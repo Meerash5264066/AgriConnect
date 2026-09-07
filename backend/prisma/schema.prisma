@@ -1,0 +1,510 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  directUrl  = env("DIRECT_URL")
+  extensions = [vector]
+}
+
+// ─────────────────────────────────────────────
+// USERS & ROLES
+// ─────────────────────────────────────────────
+
+enum Role {
+  FARMER
+  BUYER
+  CUSTOMER
+  ADMIN
+}
+
+model User {
+  id        String   @id @default(uuid())
+  username  String   @unique
+  email     String?  @unique
+  password  String
+  role      Role
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  farmer        Farmer?
+  buyer         Buyer?
+  customer      Customer?
+  notifications Notification[]
+}
+
+// ─────────────────────────────────────────────
+// FARMER
+// ─────────────────────────────────────────────
+
+model Farmer {
+  id             String  @id @default(uuid())
+  userId         String  @unique
+  user           User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name           String
+  phone          String?
+  email          String?
+  aadhaar        String?
+  address        String?
+  location       String?
+  state          String?
+  pincode        String?
+
+  // Farm
+  farmSize       String?
+  soilType       String?
+  primaryCrops   String?
+  irrigationType String?
+
+  // Bank / Escrow
+  bankName       String?
+  accountNumber  String?
+  ifsc           String?
+  upiId          String?
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  farms             Farm[]
+  crops             Crop[]
+  contracts         Contract[]
+  inventoryBatches  InventoryBatch[]
+  diseaseScans      DiseaseScan[]
+  aiRecommendations AIRecommendation[]
+}
+
+// ─────────────────────────────────────────────
+// BUYER
+// ─────────────────────────────────────────────
+
+model Buyer {
+  id               String  @id @default(uuid())
+  userId           String  @unique
+  user             User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  company          String
+  gstin            String?
+  representative   String?
+  phone            String?
+  email            String?
+  category         String?
+  monthlyBudget    String?
+  warehouseAddress String?
+  state            String?
+  pincode          String?
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  procurementDemands ProcurementDemand[]
+  contracts          Contract[]
+}
+
+// ─────────────────────────────────────────────
+// CUSTOMER (B2C End Consumer)
+// ─────────────────────────────────────────────
+
+model Customer {
+  id        String  @id @default(uuid())
+  userId    String  @unique
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name      String
+  phone     String?
+  email     String?
+  address   String?
+  city      String?
+  state     String?
+  pincode   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cart      Cart?
+  orders    Order[]
+}
+
+// ─────────────────────────────────────────────
+// FARM
+// ─────────────────────────────────────────────
+
+model Farm {
+  id             String  @id @default(uuid())
+  farmerId       String
+  farmer         Farmer  @relation(fields: [farmerId], references: [id], onDelete: Cascade)
+
+  name           String?
+  totalAcres     Float?
+  surveyNumber   String?
+  village        String?
+  taluk          String?
+  district       String?
+  state          String?
+  pincode        String?
+
+  soilType       String?
+  soilPhLevel    Float?
+  nitrogenLevel  Float?
+  phosphorusLevel Float?
+  potassiumLevel Float?
+
+  irrigationType String?
+  waterSource    String?
+  annualRainfall Float?
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  crops Crop[]
+}
+
+// ─────────────────────────────────────────────
+// CROP
+// ─────────────────────────────────────────────
+
+enum CropStatus {
+  GROWING
+  READY
+  HARVESTED
+  SOLD
+}
+
+model Crop {
+  id             String     @id @default(uuid())
+  farmerId       String
+  farmer         Farmer     @relation(fields: [farmerId], references: [id], onDelete: Cascade)
+  farmId         String?
+  farm           Farm?      @relation(fields: [farmId], references: [id])
+
+  cropName       String
+  variety        String?
+  quantityKg     Float
+  pricePerKg     Float?
+  quality        String?    @default("Grade A")
+  status         CropStatus @default(READY)
+  harvestDate    DateTime?
+  description    String?
+  location       String?
+  imageUrl       String?
+
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  contractSupplies ContractSupply[]
+  inventoryBatches InventoryBatch[]
+}
+
+// ─────────────────────────────────────────────
+// PROCUREMENT DEMAND (Buyer posts what they need)
+// ─────────────────────────────────────────────
+
+model ProcurementDemand {
+  id             String   @id @default(uuid())
+  buyerId        String
+  buyer          Buyer    @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+
+  cropName       String
+  quantityKg     Float
+  expectedPrice  Float?
+  quality        String?  @default("Grade A")
+  requiredDate   DateTime?
+  duration       String?
+  description    String?
+  isActive       Boolean  @default(true)
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+// ─────────────────────────────────────────────
+// CONTRACT
+// ─────────────────────────────────────────────
+
+enum ContractStatus {
+  DRAFT
+  PENDING
+  ACCEPTED
+  ACTIVE
+  COMPLETED
+  REJECTED
+  NEGOTIATION
+  CANCELLED
+}
+
+model Contract {
+  id              String         @id @default(uuid())
+  farmerId        String
+  farmer          Farmer         @relation(fields: [farmerId], references: [id])
+  buyerId         String
+  buyer           Buyer          @relation(fields: [buyerId], references: [id])
+
+  cropName        String
+  quantityKg      Float
+  pricePerKg      Float?
+  totalValue      Float?
+  quality         String?        @default("Grade A")
+  supplyFrequency String?        @default("Weekly")
+  weeklyQuantity  Float?
+  startDate       DateTime?
+  endDate         DateTime?
+  paymentTerms    String?        @default("Escrow on Delivery")
+  deliveryTerms   String?        @default("FOB Farm Gate")
+  status          ContractStatus @default(PENDING)
+  notes           String?
+  negotiationNote String?
+
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  supplies ContractSupply[]
+}
+
+// ─────────────────────────────────────────────
+// CONTRACT SUPPLY (Weekly delivery logs)
+// ─────────────────────────────────────────────
+
+model ContractSupply {
+  id             String   @id @default(uuid())
+  contractId     String
+  contract       Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  cropId         String?
+  crop           Crop?    @relation(fields: [cropId], references: [id])
+
+  expectedQty    Float?
+  scheduledQty   Float
+  actualQty      Float
+  shortfall      Float?   @default(0)
+  remainingQty   Float?
+  deliveryDate   DateTime @default(now())
+  notes          String?
+  status         String?  @default("Delivered")
+
+  createdAt      DateTime @default(now())
+}
+
+// ─────────────────────────────────────────────
+// INVENTORY BATCH (Wholesale warehouse stock)
+// ─────────────────────────────────────────────
+
+model InventoryBatch {
+  id            String   @id @default(uuid())
+  batchCode     String?  @unique
+  farmerId      String?
+  farmer        Farmer?  @relation(fields: [farmerId], references: [id])
+  cropId        String?
+  crop          Crop?    @relation(fields: [cropId], references: [id])
+  cropName      String?
+
+  productId     String?
+  product       Product? @relation(fields: [productId], references: [id])
+
+  quantityKg    Float
+  remainingKg   Float
+  pricePerKg    Float?
+  warehouseLoc  String?  @default("Main Warehouse Hub")
+  expiryDate    DateTime?
+  isActive      Boolean  @default(true)
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// ─────────────────────────────────────────────
+// PRODUCT (B2C retail item)
+// ─────────────────────────────────────────────
+
+model Product {
+  id           String   @id @default(uuid())
+  name         String
+  description  String?
+  category     String?
+  pricePerUnit Float
+  unit         String?  @default("kg")
+  stockQty     Float?   @default(0)
+  imageUrl     String?
+  isActive     Boolean  @default(true)
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  cartItems        CartItem[]
+  orderItems       OrderItem[]
+  inventoryBatches InventoryBatch[]
+}
+
+// ─────────────────────────────────────────────
+// CART
+// ─────────────────────────────────────────────
+
+model Cart {
+  id         String     @id @default(uuid())
+  customerId String     @unique
+  customer   Customer   @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  items CartItem[]
+}
+
+model CartItem {
+  id        String  @id @default(uuid())
+  cartId    String
+  cart      Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  quantity  Float   @default(1)
+  priceSnap Float?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─────────────────────────────────────────────
+// ORDER
+// ─────────────────────────────────────────────
+
+enum OrderStatus {
+  PLACED
+  CONFIRMED
+  PACKED
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+  PENDING
+  PROCESSING
+  SHIPPED
+  REFUNDED
+}
+
+model Order {
+  id           String      @id @default(uuid())
+  customerId   String
+  customer     Customer    @relation(fields: [customerId], references: [id])
+
+  totalAmount  Float
+  status       OrderStatus @default(PLACED)
+  deliveryAddr String?
+  notes        String?
+
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  items   OrderItem[]
+  payment Payment?
+}
+
+model OrderItem {
+  id        String  @id @default(uuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  quantity  Float
+  unitPrice Float
+  subtotal  Float
+}
+
+// ─────────────────────────────────────────────
+// PAYMENT
+// ─────────────────────────────────────────────
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  UPI
+  NETBANKING
+  CARD
+  CASH_ON_DELIVERY
+  ESCROW
+  WALLET
+}
+
+model Payment {
+  id            String        @id @default(uuid())
+  orderId       String?       @unique
+  order         Order?        @relation(fields: [orderId], references: [id])
+  contractId    String?
+
+  amount        Float
+  currency      String        @default("INR")
+  method        PaymentMethod @default(UPI)
+  status        PaymentStatus @default(PENDING)
+  transactionId String?
+  gatewayRef    String?
+  paidAt        DateTime?
+
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+// ─────────────────────────────────────────────
+// NOTIFICATION
+// ─────────────────────────────────────────────
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  body      String
+  type      String?  @default("INFO")
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+// ─────────────────────────────────────────────
+// AI: DISEASE SCAN
+// ─────────────────────────────────────────────
+
+model DiseaseScan {
+  id             String   @id @default(uuid())
+  farmerId       String
+  farmer         Farmer   @relation(fields: [farmerId], references: [id], onDelete: Cascade)
+
+  cropType       String?
+  symptom        String?
+  imageUrl       String?
+  diseaseName    String?
+  confidence     Float?
+  chemicalFix    String?
+  organicFix     String?
+  rawResult      Json?
+
+  createdAt      DateTime @default(now())
+}
+
+// ─────────────────────────────────────────────
+// AI: CROP RECOMMENDATION
+// ─────────────────────────────────────────────
+
+model AIRecommendation {
+  id             String   @id @default(uuid())
+  farmerId       String
+  farmer         Farmer   @relation(fields: [farmerId], references: [id], onDelete: Cascade)
+
+  soilType       String?
+  nitrogen       Float?
+  phosphorus     Float?
+  potassium      Float?
+  ph             Float?
+  rainfall       Float?
+  temperature    Float?
+  humidity       Float?
+  season         String?
+  topCrop        String?
+  secondCrop     String?
+  thirdCrop      String?
+  explanation    String?
+  rawResult      Json?
+
+  createdAt      DateTime @default(now())
+}

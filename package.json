@@ -1,0 +1,8 @@
+{
+  "name": "agriconnect",
+  "private": true,
+  "scripts": {
+    "frontend": "npm --prefix frontend run dev",
+    "backend": "npm --prefix backend run start:dev"
+  }
+}
