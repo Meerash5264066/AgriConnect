@@ -62,8 +62,8 @@ export class ContractsController {
 
   // Step 15 — Supply Tracking
   @Post(':id/supply')
-  logSupply(@Param('id') id: string, @Body() dto: any) {
-    return this.contractsService.logSupply(id, dto);
+  logSupply(@Request() req: any, @Param('id') id: string, @Body() dto: any) {
+    return this.contractsService.logSupply(id, dto, req.user?.sub);
   }
 
   @Get(':id/supplies')

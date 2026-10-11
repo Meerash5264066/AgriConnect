@@ -45,10 +45,10 @@ export class CartService {
   async getCart(userId: string) {
     const cart = await this.getOrCreateCart(userId);
     const subtotal = cart.items.reduce(
-      (sum, item) => sum + item.quantity * (item.priceSnap || item.product.pricePerUnit),
+      (sum: number, item: any) => sum + item.quantity * (item.priceSnap || item.product.pricePerUnit),
       0,
     );
-    const totalItems = cart.items.reduce((sum, item) => sum + item.quantity, 0);
+    const totalItems = cart.items.reduce((sum: number, item: any) => sum + item.quantity, 0);
 
     return {
       cartId: cart.id,

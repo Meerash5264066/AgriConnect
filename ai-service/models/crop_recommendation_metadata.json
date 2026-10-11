@@ -1,0 +1,14 @@
+{
+  "model_name": "Random Forest",
+  "features": [
+    "N",
+    "P",
+    "K",
+    "temperature",
+    "humidity",
+    "ph",
+    "rainfall"
+  ],
+  "target": "label",
+  "test_accuracy": 0.9955
+}

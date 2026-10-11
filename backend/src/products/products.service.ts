@@ -6,7 +6,11 @@ export class ProductsService implements OnModuleInit {
   constructor(private prisma: PrismaService) {}
 
   async onModuleInit() {
-    await this.seedDefaultProducts();
+    try {
+      await this.seedDefaultProducts();
+    } catch (err: any) {
+      console.warn('Seed default products warning:', err.message);
+    }
   }
 
   // Auto-seed Tomato ₹35/kg, Onion ₹30/kg, Potato ₹28/kg per Step 17

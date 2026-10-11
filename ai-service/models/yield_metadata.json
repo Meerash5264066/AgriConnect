@@ -1,0 +1,24 @@
+{
+  "feature": "Historical Crop Yield Reference",
+  "source": "FAOSTAT Crops and livestock products",
+  "area": "India",
+  "unit": "kg/ha",
+  "historical_years": [
+    2000,
+    2024
+  ],
+  "training_cutoff_year": 2021,
+  "evaluation_period": "2022-2024",
+  "training_records": 1792,
+  "test_records": 249,
+  "crops_evaluated": 83,
+  "baseline": "Latest available yield per crop through 2021",
+  "mae_kg_per_ha": 519.86,
+  "rmse_kg_per_ha": 947.28,
+  "limitations": [
+    "Historical reference, not a trained ML model",
+    "Country-level annual data, not farm-level prediction",
+    "No future trend adjustment",
+    "Evaluation covers only crops with prior observations"
+  ]
+}

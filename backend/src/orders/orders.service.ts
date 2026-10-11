@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -25,7 +25,7 @@ export class OrdersService {
       if (!cart || !cart.items.length) {
         throw new BadRequestException('Cannot checkout with an empty cart');
       }
-      items = cart.items.map((i) => ({
+      items = cart.items.map((i: any) => ({
         productId: i.productId,
         quantity: i.quantity,
       }));
@@ -144,7 +144,7 @@ export class OrdersService {
     });
   }
 
-  async getOrderById(id: string) {
+  async getOrderById(id: string, userId?: string, userRole?: string) {
     const order = await this.prisma.order.findUnique({
       where: { id },
       include: {
@@ -154,11 +154,17 @@ export class OrdersService {
       },
     });
     if (!order) throw new NotFoundException('Order not found');
+    if (userId && userRole !== 'ADMIN') {
+      const customer = await this.prisma.customer.findUnique({ where: { userId } });
+      if (!customer || customer.id !== order.customerId) {
+        throw new ForbiddenException('You do not have permission to view this order');
+      }
+    }
     return order;
   }
 
   // Step 19: Order status progression: PLACED -> CONFIRMED -> PACKED -> OUT_FOR_DELIVERY -> DELIVERED
-  async updateOrderStatus(orderId: string, status: string) {
+  async updateOrderStatus(orderId: string, status: string, userId?: string, userRole?: string) {
     const validStatuses = [
       'PLACED',
       'CONFIRMED',
@@ -172,7 +178,21 @@ export class OrdersService {
       throw new BadRequestException(`Invalid status. Must be one of: ${validStatuses.join(', ')}`);
     }
 
-    const order = await this.prisma.order.update({
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { customer: true },
+    });
+    if (!order) throw new NotFoundException('Order not found');
+
+    if (userId && userRole !== 'ADMIN') {
+      const customer = await this.prisma.customer.findUnique({ where: { userId } });
+      const isOwner = customer && customer.id === order.customerId;
+      if (!isOwner || upperStatus !== 'CANCELLED') {
+        throw new ForbiddenException('Only administrators can update order fulfillment status');
+      }
+    }
+
+    const updatedOrder = await this.prisma.order.update({
       where: { id: orderId },
       data: { status: upperStatus as any },
       include: { customer: true },
@@ -204,7 +224,7 @@ export class OrdersService {
       });
     }
 
-    return order;
+    return updatedOrder;
   }
 
   async getAllOrders() {

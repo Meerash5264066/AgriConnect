@@ -24,7 +24,13 @@ backend/.env
 backend/.env.local
 frontend/.env
 frontend/.env.local
+ai-service/.env
+ai-service/.env.*
 !*.env.example
+
+# Build artifacts & cache
+*.tsbuildinfo
+.pytest_cache/
 
 # Logs and OS
 *.log

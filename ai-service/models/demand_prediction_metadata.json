@@ -1,0 +1,144 @@
+{
+  "model_name": "AgriConnect Demand Forecaster",
+  "model_type": "RandomForestRegressor",
+  "version": "1.0.0-synthetic",
+  "data_source": "synthetic_v1",
+  "data_source_warning": "This model was trained on ENTIRELY SYNTHETIC data. Metrics reported here reflect synthetic-data performance only and must not be cited as real agricultural demand forecasting accuracy.",
+  "trained_at": "2026-10-10T16:08:11.590359+00:00",
+  "random_seed": 42,
+  "target_column": "target_demand_kg",
+  "target_unit": "kg",
+  "feature_columns": [
+    "crop_name",
+    "location",
+    "season",
+    "quality_tier",
+    "month",
+    "historical_volume_kg",
+    "expected_price_inr_per_kg"
+  ],
+  "feature_order_for_inference": [
+    "crop_name",
+    "location",
+    "season",
+    "quality_tier",
+    "expected_price_inr_per_kg",
+    "month",
+    "historical_volume_kg"
+  ],
+  "categorical_features": [
+    "crop_name",
+    "location",
+    "season",
+    "quality_tier"
+  ],
+  "numeric_features": [
+    "month",
+    "historical_volume_kg",
+    "expected_price_inr_per_kg"
+  ],
+  "crop_vocabulary": [
+    "Tomato",
+    "Onion",
+    "Potato",
+    "Wheat",
+    "Rice",
+    "Maize",
+    "Chickpea",
+    "Sugarcane",
+    "Soybean",
+    "Brinjal"
+  ],
+  "location_vocabulary": [
+    "Tamil Nadu",
+    "Andhra Pradesh",
+    "Karnataka",
+    "Maharashtra",
+    "Madhya Pradesh"
+  ],
+  "season_vocabulary": [
+    "Kharif",
+    "Rabi",
+    "Zaid"
+  ],
+  "quality_vocabulary": [
+    "Grade A",
+    "Grade B"
+  ],
+  "preprocessing": {
+    "categorical": "OrdinalEncoder with fixed category lists",
+    "expected_price_inr_per_kg": "SimpleImputer(strategy='median') — ~15% NaN imputed",
+    "month": "passthrough (integer 1-12, never null)",
+    "historical_volume_kg": "passthrough (float >=0, never null)"
+  },
+  "leakage_excluded_columns": [
+    "record_id",
+    "year",
+    "target_demand_kg",
+    "is_synthetic",
+    "data_source"
+  ],
+  "split": {
+    "train_years": [
+      2019,
+      2020,
+      2021,
+      2022
+    ],
+    "val_year": 2023,
+    "test_year": 2024,
+    "train_n": 2400,
+    "val_n": 600,
+    "test_n": 600
+  },
+  "deployment_gate": {
+    "metric": "r2",
+    "threshold": 0.0,
+    "val_value": 0.653531,
+    "passed": true
+  },
+  "baseline": {
+    "description": "Naive seasonal mean per (crop_name, location, month); falls back to global mean for unseen combinations.",
+    "global_mean_kg": 55359.0095,
+    "n_groups": 600,
+    "val_metrics": {
+      "mae_kg": 7039.3071,
+      "rmse_kg": 13397.254,
+      "r2": 0.672486
+    },
+    "test_metrics": {
+      "mae_kg": 7286.427,
+      "rmse_kg": 12730.0255,
+      "r2": 0.677468
+    }
+  },
+  "model_metrics": {
+    "val": {
+      "mae_kg": 7231.2398,
+      "rmse_kg": 13779.4821,
+      "r2": 0.653531
+    },
+    "test": {
+      "mae_kg": 6823.3314,
+      "rmse_kg": 13096.7973,
+      "r2": 0.658615
+    }
+  },
+  "feature_importances": {
+    "crop_name": 0.039426,
+    "location": 0.021689,
+    "season": 0.032904,
+    "quality_tier": 0.003702,
+    "expected_price_inr_per_kg": 0.056624,
+    "month": 0.049984,
+    "historical_volume_kg": 0.795672
+  },
+  "limitations": [
+    "Trained exclusively on SYNTHETIC data — not real procurement history.",
+    "Metrics do not represent real agricultural demand forecasting accuracy.",
+    "Crop and location vocabularies are fixed; unseen inputs will error at inference.",
+    "Seasonal patterns are rule-derived from the generator, not learned from real data.",
+    "Does not account for price shocks, weather disruptions, or policy changes.",
+    "historical_volume_kg is a 1-month lag — inference callers must supply prior month's demand."
+  ]
+}

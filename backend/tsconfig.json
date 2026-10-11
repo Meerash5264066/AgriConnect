@@ -12,7 +12,8 @@
     "baseUrl": "./",
     "incremental": true,
     "skipLibCheck": true,
-    "strict": true
+    "strict": true,
+    "strictPropertyInitialization": false
   },
   "include": [
     "src"

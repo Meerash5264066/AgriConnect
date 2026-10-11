@@ -1,0 +1,126 @@
+{
+  "dataset_name": "AgriConnect Synthetic Demand History",
+  "version": "1.0.0",
+  "data_source": "synthetic",
+  "data_source_warning": "This dataset is entirely synthetic. Values are generated from statistical rules calibrated to plausible Indian agricultural demand magnitudes. They do not represent real procurement transactions, APMC arrivals, or any government or private market data. Model accuracy figures derived from this dataset must not be cited as real agricultural forecasting performance.",
+  "output_csv": "demand_history_synthetic.csv",
+  "generated_at": "2026-10-10T15:53:18.418572+00:00",
+  "random_seed": 42,
+  "total_rows": 3600,
+  "expected_rows": 3600,
+  "years": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024
+  ],
+  "months": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12
+  ],
+  "crop_vocabulary": [
+    "Tomato",
+    "Onion",
+    "Potato",
+    "Wheat",
+    "Rice",
+    "Maize",
+    "Chickpea",
+    "Sugarcane",
+    "Soybean",
+    "Brinjal"
+  ],
+  "location_vocabulary": [
+    "Tamil Nadu",
+    "Andhra Pradesh",
+    "Karnataka",
+    "Maharashtra",
+    "Madhya Pradesh"
+  ],
+  "season_mapping": {
+    "1": "Rabi",
+    "2": "Rabi",
+    "3": "Rabi",
+    "4": "Zaid",
+    "5": "Zaid",
+    "6": "Zaid",
+    "7": "Kharif",
+    "8": "Kharif",
+    "9": "Kharif",
+    "10": "Kharif",
+    "11": "Rabi",
+    "12": "Rabi"
+  },
+  "columns": {
+    "record_id": "Monotonic integer row identifier (1-indexed).",
+    "crop_name": "Crop commodity name (title-case). Matches ProcurementDemand.cropName.",
+    "location": "State name. Matches Buyer.state / DemandPredictionRequest.location.",
+    "year": "Calendar year (2019–2024). Used for train/val/test splitting only.",
+    "month": "Calendar month 1–12. Matches DemandPredictionRequest.month.",
+    "season": "Agricultural season (Kharif/Rabi/Zaid) derived from month.",
+    "historical_volume_kg": "Previous-month demand volume in kg (1-month lag). Maps to DemandPredictionRequest.historical_volume.",
+    "quality_tier": "Quality grade string (Grade A / Grade B). Matches ProcurementDemand.quality.",
+    "expected_price_inr_per_kg": "Buyer's expected price in INR per kg. Matches ProcurementDemand.expectedPrice. May be NaN.",
+    "target_demand_kg": "Regression target — total procurement demand volume in kg for this crop/location/month period. Derived from ProcurementDemand.quantityKg.",
+    "is_synthetic": "Boolean flag. Always True for this dataset.",
+    "data_source": "String tag. Always 'synthetic_v1'."
+  },
+  "target_column": "target_demand_kg",
+  "target_unit": "kg",
+  "generation_assumptions": [
+    "Base demand per (crop, location) drawn from log-normal: mu=log(50000), sigma=0.4.",
+    "Kharif crops (Tomato, Rice, Maize, Soybean) receive a ×1.2 multiplier during Kharif months.",
+    "Rabi crops (Wheat, Chickpea, Potato, Onion) receive a ×1.2 multiplier during Rabi months.",
+    "All crops receive a ×0.85 multiplier during Zaid months.",
+    "Annual demand growth trend: +2% per year from 2019 baseline.",
+    "Gaussian noise added per row: std = 5% of base demand.",
+    "Approximately 3% of rows have zero target demand (disruption simulation).",
+    "15% of rows have NaN expected_price_inr_per_kg.",
+    "historical_volume_kg is the 1-month lag of target_demand_kg within each (crop, location) series.",
+    "Values clipped to [0, 500000] kg and rounded to 2 decimal places."
+  ],
+  "split_plan": {
+    "method": "year-based (no random shuffle across time boundaries)",
+    "train_years": [
+      2019,
+      2020,
+      2021,
+      2022
+    ],
+    "validation_year": 2023,
+    "test_year": 2024,
+    "train_records": 2400,
+    "validation_records": 600,
+    "test_records": 600
+  },
+  "actual_stats": {
+    "zero_demand_fraction": 0.0322,
+    "price_nan_fraction": 0.1439,
+    "target_demand_min_kg": 0.0,
+    "target_demand_max_kg": 165071.38,
+    "target_demand_mean_kg": 56439.22,
+    "target_demand_median_kg": 55423.28,
+    "historical_volume_min_kg": 0.0,
+    "historical_volume_max_kg": 165071.38
+  },
+  "limitations": [
+    "Dataset is 100% synthetic — not derived from real procurement records.",
+    "Seasonal patterns are rule-based, not learned from real APMC or mandi data.",
+    "Crop and location vocabularies are fixed; rows outside these vocabularies do not exist.",
+    "Price–demand interactions are not modelled (price is independent noise).",
+    "Year trend is a simple linear multiplier, not a real economic projection.",
+    "Zero-demand rows are random Bernoulli draws, not tied to real supply disruptions."
+  ]
+}

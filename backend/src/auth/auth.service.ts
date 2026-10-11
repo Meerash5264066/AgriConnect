@@ -17,7 +17,11 @@ export class AuthService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
-    await this.seedDemoAccounts();
+    try {
+      await this.seedDemoAccounts();
+    } catch (err: any) {
+      console.warn('Seed demo accounts warning:', err.message);
+    }
   }
 
   // Auto-seed demo accounts so UI demo login buttons always work

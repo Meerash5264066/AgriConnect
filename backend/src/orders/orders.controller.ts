@@ -8,6 +8,7 @@ import {
   Param,
   UseGuards,
   Request,
+  ForbiddenException,
 } from '@nestjs/common';
 import { OrdersService } from './orders.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -23,13 +24,16 @@ export class OrdersController {
   }
 
   @Get('admin/all')
-  getAllOrders() {
+  getAllOrders(@Request() req: any) {
+    if (req.user?.role !== 'ADMIN') {
+      throw new ForbiddenException('Admin role required to view all orders');
+    }
     return this.ordersService.getAllOrders();
   }
 
   @Get(':id')
-  getOrderById(@Param('id') id: string) {
-    return this.ordersService.getOrderById(id);
+  getOrderById(@Request() req: any, @Param('id') id: string) {
+    return this.ordersService.getOrderById(id, req.user?.sub, req.user?.role);
   }
 
   @Post()
@@ -38,12 +42,12 @@ export class OrdersController {
   }
 
   @Patch(':id/status')
-  patchStatus(@Param('id') id: string, @Body('status') status: string) {
-    return this.ordersService.updateOrderStatus(id, status);
+  patchStatus(@Request() req: any, @Param('id') id: string, @Body('status') status: string) {
+    return this.ordersService.updateOrderStatus(id, status, req.user?.sub, req.user?.role);
   }
 
   @Put(':id/status')
-  putStatus(@Param('id') id: string, @Body('status') status: string) {
-    return this.ordersService.updateOrderStatus(id, status);
+  putStatus(@Request() req: any, @Param('id') id: string, @Body('status') status: string) {
+    return this.ordersService.updateOrderStatus(id, status, req.user?.sub, req.user?.role);
   }
 }

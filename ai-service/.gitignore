@@ -1,0 +1,34 @@
+# Python virtual environment
+.venv/
+venv/
+ENV/
+
+# Python cache & bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Models directory: exclude trained model artifacts, preserve structure and metadata
+models/*
+!models/.gitkeep
+!models/*.json
+
+# Datasets directory: exclude dataset files, preserve folder structure and metadata
+datasets/**
+!datasets/**/
+!datasets/**/.gitkeep
+!datasets/**/*.json
+
+# Temporary & uploaded files
+temp/
+uploads/
+*.tmp

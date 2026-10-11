@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -7,28 +7,58 @@ export class ProcurementService {
 
   async createDemand(buyerUserId: string, dto: any) {
     const buyer = await this.prisma.buyer.findUnique({ where: { userId: buyerUserId } });
-    if (!buyer) throw new NotFoundException('Buyer profile not found');
+    if (!buyer) throw new NotFoundException('Buyer profile not found for authenticated user');
+
+    const qty = parseFloat(String(dto.quantityKg || dto.quantity || 0));
+    if (isNaN(qty) || qty <= 0) {
+      throw new BadRequestException('quantityKg must be a positive number');
+    }
+
+    const price = dto.expectedPrice ? parseFloat(String(dto.expectedPrice)) : null;
 
     return this.prisma.procurementDemand.create({
       data: {
         buyerId: buyer.id,
-        cropName: dto.cropName,
-        quantityKg: parseFloat(dto.quantityKg || dto.quantity || 0),
-        expectedPrice: dto.expectedPrice ? parseFloat(dto.expectedPrice) : null,
-        quality: dto.quality || 'Grade A',
+        cropName: (dto.cropName || dto.crop).trim(),
+        quantityKg: qty,
+        expectedPrice: price,
+        quality: dto.quality ? dto.quality.trim() : 'Grade A',
         requiredDate: dto.requiredDate ? new Date(dto.requiredDate) : null,
-        duration: dto.duration || 'One-time',
-        description: dto.description || null,
+        duration: dto.duration ? dto.duration.trim() : 'One-time',
+        description: dto.description ? dto.description.trim() : null,
         isActive: true,
       },
-      include: { buyer: true },
+      include: {
+        buyer: {
+          select: { id: true, company: true, representative: true, warehouseAddress: true, state: true },
+        },
+      },
     });
   }
 
   async getAllDemands() {
     return this.prisma.procurementDemand.findMany({
       where: { isActive: true },
-      include: { buyer: { select: { id: true, company: true, representative: true, warehouseAddress: true } } },
+      include: {
+        buyer: {
+          select: { id: true, company: true, representative: true, warehouseAddress: true, state: true },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async getBuyerDemands(buyerUserId: string) {
+    const buyer = await this.prisma.buyer.findUnique({ where: { userId: buyerUserId } });
+    if (!buyer) throw new NotFoundException('Buyer profile not found');
+
+    return this.prisma.procurementDemand.findMany({
+      where: { buyerId: buyer.id, isActive: true },
+      include: {
+        buyer: {
+          select: { id: true, company: true, representative: true, warehouseAddress: true, state: true },
+        },
+      },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -36,9 +66,13 @@ export class ProcurementService {
   async getDemandById(id: string) {
     const demand = await this.prisma.procurementDemand.findUnique({
       where: { id },
-      include: { buyer: true },
+      include: {
+        buyer: {
+          select: { id: true, company: true, representative: true, warehouseAddress: true, state: true },
+        },
+      },
     });
-    if (!demand) throw new NotFoundException('Procurement demand not found');
+    if (!demand) throw new NotFoundException(`Procurement demand #${id} not found`);
     return demand;
   }
 
@@ -47,37 +81,85 @@ export class ProcurementService {
     if (!buyer) throw new NotFoundException('Buyer profile not found');
 
     const demand = await this.prisma.procurementDemand.findUnique({ where: { id } });
-    if (!demand) throw new NotFoundException('Procurement demand not found');
+    if (!demand) throw new NotFoundException(`Procurement demand #${id} not found`);
+    if (demand.buyerId !== buyer.id) {
+      throw new ForbiddenException('You do not have permission to update this demand');
+    }
+
+    const qty = dto.quantityKg !== undefined ? parseFloat(String(dto.quantityKg)) : undefined;
+    const price = dto.expectedPrice !== undefined ? parseFloat(String(dto.expectedPrice)) : undefined;
 
     return this.prisma.procurementDemand.update({
       where: { id },
       data: {
-        cropName: dto.cropName,
-        quantityKg: dto.quantityKg ? parseFloat(dto.quantityKg) : undefined,
-        expectedPrice: dto.expectedPrice ? parseFloat(dto.expectedPrice) : undefined,
-        quality: dto.quality,
+        cropName: dto.cropName ? dto.cropName.trim() : undefined,
+        quantityKg: qty,
+        expectedPrice: price,
+        quality: dto.quality ? dto.quality.trim() : undefined,
         requiredDate: dto.requiredDate ? new Date(dto.requiredDate) : undefined,
-        duration: dto.duration,
-        description: dto.description,
+        duration: dto.duration ? dto.duration.trim() : undefined,
+        description: dto.description !== undefined ? (dto.description ? dto.description.trim() : null) : undefined,
         isActive: dto.isActive !== undefined ? dto.isActive : undefined,
+      },
+      include: {
+        buyer: {
+          select: { id: true, company: true, representative: true, warehouseAddress: true, state: true },
+        },
       },
     });
   }
 
-  // Step 12 — Farmer Matching for a demand
-  async matchFarmersForDemand(demandId: string) {
-    const demand = await this.getDemandById(demandId);
-    return this.findMatchingFarmers(demand.cropName, demand.quantityKg, demand.quality || undefined);
+  async deleteDemand(buyerUserId: string, id: string) {
+    const buyer = await this.prisma.buyer.findUnique({ where: { userId: buyerUserId } });
+    if (!buyer) throw new NotFoundException('Buyer profile not found');
+
+    const demand = await this.prisma.procurementDemand.findUnique({ where: { id } });
+    if (!demand) throw new NotFoundException(`Procurement demand #${id} not found`);
+    if (demand.buyerId !== buyer.id) {
+      throw new ForbiddenException('You do not have permission to delete this demand');
+    }
+
+    return this.prisma.procurementDemand.update({
+      where: { id },
+      data: { isActive: false },
+    });
   }
 
-  async findMatchingFarmers(cropName: string, requestedQtyKg: number, quality?: string) {
+  // Step 12 & Phase 17 — Multi-Farmer Matching for a demand
+  async matchFarmersForDemand(demandId: string) {
+    const demand = await this.getDemandById(demandId);
+    return this.findMatchingFarmers(
+      demand.cropName,
+      demand.quantityKg,
+      demand.quality || undefined,
+      demand.expectedPrice || undefined,
+      demand.buyer?.state || undefined,
+    );
+  }
+
+  async findMatchingFarmers(
+    cropName: string,
+    requestedQtyKg: number,
+    quality?: string,
+    maxPrice?: number,
+    location?: string,
+  ) {
+    if (!cropName || !cropName.trim()) {
+      throw new BadRequestException('cropName is required for matching');
+    }
+    const targetQty = parseFloat(String(requestedQtyKg || 0));
+    if (isNaN(targetQty) || targetQty <= 0) {
+      throw new BadRequestException('requestedQuantityKg must be a positive number');
+    }
+
     // Find all ready crops matching the crop name
     const crops = await this.prisma.crop.findMany({
       where: {
-        cropName: { equals: cropName, mode: 'insensitive' },
+        cropName: { equals: cropName.trim(), mode: 'insensitive' },
         status: 'READY',
         quantityKg: { gt: 0 },
-        ...(quality ? { quality } : {}),
+        ...(quality && quality !== 'All' ? { quality: { equals: quality.trim(), mode: 'insensitive' } } : {}),
+        ...(maxPrice ? { pricePerKg: { lte: parseFloat(String(maxPrice)) } } : {}),
       },
       include: {
         farmer: {
@@ -86,6 +168,7 @@ export class ProcurementService {
             name: true,
             phone: true,
             location: true,
+            state: true,
             farmSize: true,
             soilType: true,
           },
@@ -94,38 +177,61 @@ export class ProcurementService {
       orderBy: { quantityKg: 'desc' },
     });
 
+    // Optional sort by location match if specified
+    const sortedCrops = [...crops];
+    if (location && location.trim()) {
+      const loc = location.trim().toLowerCase();
+      sortedCrops.sort((a, b) => {
+        const aLoc = (a.location || a.farmer.location || '').toLowerCase();
+        const bLoc = (b.location || b.farmer.location || '').toLowerCase();
+        const aMatch = aLoc.includes(loc) ? 1 : 0;
+        const bMatch = bLoc.includes(loc) ? 1 : 0;
+        return bMatch - aMatch; // exact/partial location matches first
+      });
+    }
+
     let accumulatedQty = 0;
+    let accumulatedValue = 0;
     const selectedMatches: any[] = [];
 
-    for (const crop of crops) {
-      if (accumulatedQty >= requestedQtyKg) break;
-      const needed = requestedQtyKg - accumulatedQty;
+    for (const crop of sortedCrops) {
+      if (accumulatedQty >= targetQty) break;
+      const needed = targetQty - accumulatedQty;
       const allocated = Math.min(crop.quantityKg, needed);
       accumulatedQty += allocated;
+
+      const price = crop.pricePerKg || 0;
+      accumulatedValue += allocated * price;
 
       selectedMatches.push({
         cropId: crop.id,
         farmerId: crop.farmer.id,
         farmerName: crop.farmer.name,
-        farmerLocation: crop.farmer.location,
+        farmerPhone: crop.farmer.phone,
+        farmerLocation: crop.location || crop.farmer.location || 'Coimbatore, Tamil Nadu',
         cropName: crop.cropName,
-        quality: crop.quality,
+        quality: crop.quality || 'Grade A',
         availableKg: crop.quantityKg,
         matchedKg: allocated,
         pricePerKg: crop.pricePerKg,
+        subtotal: allocated * price,
       });
     }
 
-    const isFullyMatched = accumulatedQty >= requestedQtyKg;
-    const shortfall = Math.max(0, requestedQtyKg - accumulatedQty);
+    const isFullyMatched = accumulatedQty >= targetQty;
+    const shortfall = Math.max(0, targetQty - accumulatedQty);
+    const weightedAvgPrice = accumulatedQty > 0 ? (accumulatedValue / accumulatedQty) : 0;
 
     return {
       requestedCrop: cropName,
-      requestedQuantityKg: requestedQtyKg,
+      requestedQuantityKg: targetQty,
       totalMatchedKg: accumulatedQty,
       isFullyMatched,
+      isMultiFarmerPool: selectedMatches.length > 1,
       shortfallKg: shortfall,
       matchedFarmersCount: selectedMatches.length,
+      averagePricePerKg: Math.round(weightedAvgPrice * 100) / 100,
+      totalEstimatedCost: Math.round(accumulatedValue * 100) / 100,
       matches: selectedMatches,
     };
   }

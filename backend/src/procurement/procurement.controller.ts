@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Put,
+  Delete,
   Param,
   Body,
   Query,
@@ -21,16 +22,26 @@ export class ProcurementController {
     return this.procurementService.getAllDemands();
   }
 
+  @UseGuards(JwtAuthGuard)
+  @Get('buyer/me')
+  getMyDemands(@Request() req: any) {
+    return this.procurementService.getBuyerDemands(req.user.sub);
+  }
+
   @Get('match')
   matchDirect(
     @Query('cropName') cropName: string,
     @Query('quantityKg') quantityKg: string,
     @Query('quality') quality?: string,
+    @Query('maxPrice') maxPrice?: string,
+    @Query('location') location?: string,
   ) {
     return this.procurementService.findMatchingFarmers(
       cropName || 'Tomato',
       parseFloat(quantityKg || '5000'),
       quality,
+      maxPrice ? parseFloat(maxPrice) : undefined,
+      location,
     );
   }
 
@@ -54,5 +65,11 @@ export class ProcurementController {
   @Put(':id')
   updateDemand(@Request() req: any, @Param('id') id: string, @Body() dto: any) {
     return this.procurementService.updateDemand(req.user.sub, id, dto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete(':id')
+  deleteDemand(@Request() req: any, @Param('id') id: string) {
+    return this.procurementService.deleteDemand(req.user.sub, id);
   }
 }

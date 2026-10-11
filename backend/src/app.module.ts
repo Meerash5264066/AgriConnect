@@ -17,6 +17,9 @@ import { OrdersModule } from './orders/orders.module';
 import { PaymentsModule } from './payments/payments.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { InventoryModule } from './inventory/inventory.module';
+import { WeatherModule } from './weather/weather.module';
+import { VehiclesModule } from './vehicles/vehicles.module';
+import { AiModule } from './ai/ai.module';
 
 // Misc
 import { HealthController } from './health.controller';
@@ -37,6 +40,9 @@ import { HealthController } from './health.controller';
     PaymentsModule,
     NotificationsModule,
     InventoryModule,
+    WeatherModule,
+    VehiclesModule,
+    AiModule,
   ],
   controllers: [HealthController],
   providers: [],

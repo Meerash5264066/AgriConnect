@@ -1,0 +1,26 @@
+{
+  "model_name": "AgriConnect Previous-Price Baseline",
+  "model_type": "time_series_baseline",
+  "target": "Modal_Price",
+  "grouping_columns": [
+    "State",
+    "District",
+    "Market",
+    "Commodity"
+  ],
+  "prediction_method": "Use the most recent valid observed price for the same state, district, market and commodity.",
+  "training_period": "2025-01-01 to 2025-09-30",
+  "evaluation_period": "2025-10-01 to 2025-12-30",
+  "test_records_with_history": 485540,
+  "baseline_mae": 330.24,
+  "baseline_rmse": 2252.48,
+  "baseline_r2": 0.8243,
+  "mae_below_100000_actual_price": 319.11,
+  "rmse_below_100000_actual_price": 2056.95,
+  "limitations": [
+    "Requires historical prices for the same market and commodity.",
+    "Extreme price changes can cause large prediction errors.",
+    "Evaluation is based on 2025 data only.",
+    "This is a baseline, not a validated production forecasting model."
+  ]
+}
