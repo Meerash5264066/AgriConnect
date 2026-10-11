@@ -17,16 +17,21 @@ htmlcov/
 .env.*
 !.env.example
 
-# Models directory: exclude trained model artifacts, preserve structure and metadata
-models/*
-!models/.gitkeep
+# Models directory: include trained model weights and metadata
+!models/*.pth
+!models/*.joblib
 !models/*.json
+!models/.gitkeep
 
-# Datasets directory: exclude dataset files, preserve folder structure and metadata
-datasets/**
-!datasets/**/
-!datasets/**/.gitkeep
+# Datasets directory: include operational datasets under GitHub 100MB limit
+!datasets/**/*.gitkeep
 !datasets/**/*.json
+!datasets/**/*.csv
+!datasets/**/*.jpg
+
+# Large dataset files exceeding GitHub 100MB file limit (1.63GB and 573MB)
+datasets/price/price_trends.sqlite
+datasets/price/agriconnect_prices_2025_clean.csv
 
 # Temporary & uploaded files
 temp/
