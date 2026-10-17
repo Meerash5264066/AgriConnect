@@ -1,7 +1,8 @@
 """Commodity price baseline prediction routes."""
 
 import logging
-from fastapi import APIRouter, HTTPException, status
+from typing import Optional
+from fastapi import APIRouter, HTTPException, Query, status
 from app.schemas.common import (
     PricePredictionRequest,
     PricePredictionResponse,
@@ -141,4 +142,40 @@ async def predict_price(request: PricePredictionRequest) -> PricePredictionRespo
                 "message": "Encountered invalid price value or observation date in dataset.",
                 "error_code": "INVALID_PRICE_RECORD",
             },
+        )
+
+
+@router.get(
+    "/mandi-ticker",
+    summary="Get Traceable APMC Mandi Price Ticker Data",
+    description=(
+        "Returns verified agricultural commodity prices across 30+ commodities and Indian APMC mandis. "
+        "Modal prices are converted from standard APMC ₹/quintal to ₹/kg (₹/kg = ₹/quintal ÷ 100). "
+        "Clearly identifies observation dates, official data source, and freshness."
+    ),
+    responses={
+        status.HTTP_200_OK: {
+            "description": "APMC mandi ticker data retrieved successfully.",
+        },
+        status.HTTP_503_SERVICE_UNAVAILABLE: {
+            "description": "Mandi price dataset is unavailable.",
+        },
+    },
+)
+@router.get("/ticker", include_in_schema=False)
+async def get_mandi_ticker(
+    state: Optional[str] = Query(None, description="Optional Indian state filter"),
+    refresh: Optional[bool] = Query(False, description="Force refresh cache"),
+):
+    """Retrieve expanded APMC mandi price ticker records."""
+    from app.services.mandi_ticker import get_mandi_ticker_service
+
+    service = get_mandi_ticker_service()
+    try:
+        return service.get_ticker_payload(state_filter=state, force_refresh=bool(refresh))
+    except Exception as exc:
+        logger.error("Failed to load mandi ticker records: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"message": f"Unable to retrieve mandi ticker prices: {exc}"},
         )

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -67,7 +67,15 @@ export class BuyersService {
   async deleteProcurementDemand(userId: string, demandId: string) {
     const buyer = await this.prisma.buyer.findUnique({ where: { userId } });
     if (!buyer) throw new NotFoundException('Buyer not found');
-    return this.prisma.procurementDemand.delete({ where: { id: demandId } });
+    const demand = await this.prisma.procurementDemand.findUnique({ where: { id: demandId } });
+    if (!demand) throw new NotFoundException('Procurement demand not found');
+    if (demand.buyerId !== buyer.id) {
+      throw new ForbiddenException('You do not have permission to cancel this demand');
+    }
+    return this.prisma.procurementDemand.update({
+      where: { id: demandId },
+      data: { isActive: false },
+    });
   }
 
   async getContracts(userId: string) {

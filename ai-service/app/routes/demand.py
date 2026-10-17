@@ -88,7 +88,7 @@ CITY_TO_STATE: Dict[str, str] = {
             "model": DemandPredictionResponse,
             "description": "Successful demand forecast with experimental status disclosures.",
         },
-        status.HTTP_422_UNPROCESSABLE_ENTITY: {
+        status.HTTP_422_UNPROCESSABLE_CONTENT: {
             "description": "Validation error or unsupported categorical vocabulary input.",
         },
         status.HTTP_501_NOT_IMPLEMENTED: {
@@ -137,7 +137,7 @@ async def predict_demand(request: DemandPredictionRequest) -> DemandPredictionRe
     crop_map = {c.lower(): c for c in CROP_VOCABULARY}
     if crop_clean.lower() not in crop_map:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail={
                 "error_code": "UNSUPPORTED_CROP",
                 "message": f"Crop '{request.crop}' is not supported by the demand forecasting model.",
@@ -155,7 +155,7 @@ async def predict_demand(request: DemandPredictionRequest) -> DemandPredictionRe
         canonical_location = CITY_TO_STATE[loc_clean.lower()]
     else:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail={
                 "error_code": "UNSUPPORTED_LOCATION",
                 "message": f"Location '{request.location}' is not supported by the demand forecasting model.",
@@ -166,7 +166,7 @@ async def predict_demand(request: DemandPredictionRequest) -> DemandPredictionRe
     # 4. Month & Season Validation and Derivation ------------------------------
     if request.month is None and request.season is None:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail={
                 "error_code": "MISSING_TIME_CONTEXT",
                 "message": (
@@ -182,7 +182,7 @@ async def predict_demand(request: DemandPredictionRequest) -> DemandPredictionRe
         season_clean = request.season.strip().lower()
         if season_clean not in season_map:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail={
                     "error_code": "UNSUPPORTED_SEASON",
                     "message": f"Season '{request.season}' is not recognized.",
@@ -195,7 +195,7 @@ async def predict_demand(request: DemandPredictionRequest) -> DemandPredictionRe
     if request.month is not None:
         if not (1 <= request.month <= 12):
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail={
                     "error_code": "INVALID_MONTH",
                     "message": f"Month must be between 1 and 12, got {request.month}.",
@@ -206,7 +206,7 @@ async def predict_demand(request: DemandPredictionRequest) -> DemandPredictionRe
 
         if canonical_season is not None and canonical_season != expected_season:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail={
                     "error_code": "SEASON_MONTH_MISMATCH",
                     "message": (
@@ -228,7 +228,7 @@ async def predict_demand(request: DemandPredictionRequest) -> DemandPredictionRe
         q_clean = request.quality_tier.strip().lower()
         if q_clean not in quality_map:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail={
                     "error_code": "UNSUPPORTED_QUALITY_TIER",
                     "message": f"Quality tier '{request.quality_tier}' is invalid. Supported: {QUALITY_VOCABULARY}.",
@@ -242,7 +242,7 @@ async def predict_demand(request: DemandPredictionRequest) -> DemandPredictionRe
     if request.historical_volume is not None:
         if request.historical_volume < 0.0 or not math.isfinite(request.historical_volume):
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail={
                     "error_code": "INVALID_HISTORICAL_VOLUME",
                     "message": "historical_volume must be a non-negative finite number.",

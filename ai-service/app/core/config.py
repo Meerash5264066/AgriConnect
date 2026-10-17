@@ -34,12 +34,22 @@ class Settings(BaseSettings):
     @property
     def model_path(self) -> Path:
         """Return Path object for model directory."""
-        return Path(self.MODEL_DIR)
+        p = Path(self.MODEL_DIR)
+        if not p.is_dir():
+            alt = Path(__file__).resolve().parent.parent.parent / self.MODEL_DIR
+            if alt.is_dir():
+                return alt
+        return p
 
     @property
     def dataset_path(self) -> Path:
         """Return Path object for datasets directory."""
-        return Path(self.DATASET_DIR)
+        p = Path(self.DATASET_DIR)
+        if not p.is_dir():
+            alt = Path(__file__).resolve().parent.parent.parent / self.DATASET_DIR
+            if alt.is_dir():
+                return alt
+        return p
 
     @property
     def max_upload_size_bytes(self) -> int:
@@ -49,8 +59,16 @@ class Settings(BaseSettings):
 
     @property
     def cors_origins(self) -> List[str]:
-        """Return allowed CORS origins based on configured URLs."""
-        origins = []
+        """Return allowed CORS origins based on configured URLs and local dev environments."""
+        origins = [
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://localhost:3001",
+            "http://127.0.0.1:3001",
+            "http://localhost:8000",
+            "http://127.0.0.1:8000",
+            "null",
+        ]
         for url in [self.FRONTEND_URL, self.BACKEND_URL]:
             cleaned = url.strip().rstrip("/")
             if cleaned and cleaned not in origins:

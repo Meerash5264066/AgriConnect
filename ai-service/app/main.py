@@ -16,6 +16,7 @@ from app.routes import (
     demand_router,
     disease_router,
     market_trends_router,
+    chat_router,
 )
 
 settings = get_settings()
@@ -57,14 +58,24 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS configuration: strict configured origins, no wildcard credentials
+# CORS configuration: strict configured origins, local regex, and support for file:// origin (null)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def add_private_network_access_header(request: Request, call_next):
+    """Support Chromium Private Network Access (PNA) preflights for local agritech hardware/UI."""
+    response = await call_next(request)
+    if request.headers.get("access-control-request-private-network") == "true":
+        response.headers["Access-Control-Allow-Private-Network"] = "true"
+    return response
 
 
 # Exception Handlers
@@ -133,8 +144,9 @@ async def root():
     }
 
 
-# Register Health router at root level for /health and /ready
+# Register Health router at root level and API prefix for /health and /api/v1/health
 app.include_router(health_router)
+app.include_router(health_router, prefix=settings.AI_API_PREFIX)
 
 # Register AI modules under configured API prefix (/api/v1)
 app.include_router(crop_router, prefix=settings.AI_API_PREFIX)
@@ -142,3 +154,4 @@ app.include_router(price_router, prefix=settings.AI_API_PREFIX)
 app.include_router(demand_router, prefix=settings.AI_API_PREFIX)
 app.include_router(disease_router, prefix=settings.AI_API_PREFIX)
 app.include_router(market_trends_router, prefix=settings.AI_API_PREFIX)
+app.include_router(chat_router, prefix=settings.AI_API_PREFIX)

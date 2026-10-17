@@ -133,9 +133,9 @@ export class AiService {
 
     const timeoutConfig = this.configService.get<string | number>(
       'AI_SERVICE_TIMEOUT_MS',
-      5000,
+      15000,
     );
-    this.timeoutMs = Number(timeoutConfig) || 5000;
+    this.timeoutMs = Number(timeoutConfig) || 15000;
   }
 
   private resolveUrl(path: string): string {
@@ -245,6 +245,26 @@ export class AiService {
    */
   private async getFromAiService<T>(url: string): Promise<T> {
     return this.requestAiService<T>(url, 'GET');
+  }
+
+  /**
+   * Forward chat query with leaf diagnosis context to AI microservice chatbot.
+   */
+  async chatWithAgronomist(payload: any): Promise<any> {
+    const url = this.resolveUrl('/chat');
+    return this.postToAiService<any>(url, payload);
+  }
+
+  /**
+   * Retrieve expanded APMC mandi price ticker records.
+   */
+  async getMandiTicker(state?: string, refresh?: boolean): Promise<any> {
+    const params = new URLSearchParams();
+    if (state) params.set('state', state);
+    if (refresh) params.set('refresh', 'true');
+    const queryStr = params.toString() ? `?${params.toString()}` : '';
+    const url = this.resolveUrl(`/price/mandi-ticker${queryStr}`);
+    return this.getFromAiService<any>(url);
   }
 
   private async requestAiService<T>(

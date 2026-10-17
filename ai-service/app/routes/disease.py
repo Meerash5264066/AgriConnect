@@ -4,13 +4,18 @@ import io
 import logging
 from pathlib import Path
 from typing import Optional
-from fastapi import APIRouter, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 from PIL import Image, UnidentifiedImageError
 import torch
 from torchvision import transforms
 
 from app.core.config import get_settings
 from app.schemas.common import DiseaseDetectionResponse, ErrorResponse
+from app.services.disease_advisory import (
+    get_advisory_for_class,
+    assess_confidence,
+    SUPPORTED_CROPS,
+)
 from app.services.model_registry import get_model_registry, ModelNotAvailableError
 
 logger = logging.getLogger(__name__)
@@ -93,7 +98,11 @@ def get_remedy_recommendation(crop: str, disease: str) -> Optional[str]:
         },
     },
 )
-async def detect_disease(file: UploadFile = File(..., description="Crop leaf image file (JPEG, PNG, WEBP)")):
+async def detect_disease(
+    file: UploadFile = File(..., description="Crop leaf image file (JPEG, PNG, WEBP)"),
+    selected_crop: Optional[str] = Form(None, description="Optional crop selected by user"),
+    selected_symptom: Optional[str] = Form(None, description="Optional symptom selected by user"),
+):
     """Validate uploaded leaf image and invoke MobileNetV3-Large vision inference pipeline."""
     settings = get_settings()
 
@@ -252,14 +261,51 @@ async def detect_disease(file: UploadFile = File(..., description="Crop leaf ima
         crop_name = "Unknown"
         disease_name = predicted_class
 
+    advisory = get_advisory_for_class(predicted_class)
+    conf_assessment = assess_confidence(confidence_val)
+
+    # 9. Crop Conflict Detection (Never override model prediction, but flag discrepancy)
+    has_conflict = False
+    conflict_warning = None
+    if selected_crop and selected_crop.strip():
+        sel_clean = selected_crop.strip().lower()
+        pred_clean = crop_name.lower()
+        # Handle matching synonyms like bell pepper / pepper
+        matches = (sel_clean == pred_clean) or (sel_clean in pred_clean) or (pred_clean in sel_clean)
+        if not matches:
+            has_conflict = True
+            conflict_warning = (
+                f"You selected '{selected_crop}', but the visual AI model identified a {crop_name} leaf "
+                f"({disease_name}). Note that the visual model was trained on 10 specific crops "
+                f"({', '.join(SUPPORTED_CROPS)}). The diagnosis is based on actual image features and was not "
+                f"overridden by your dropdown selection. Please review the leaf photo."
+            )
+
+    pct_str = f"{round(confidence_val * 100, 1)}%"
+
     remedy = get_remedy_recommendation(crop_name, disease_name)
 
     return DiseaseDetectionResponse(
         predicted_class=predicted_class,
         crop=crop_name,
         disease=disease_name,
+        is_healthy=advisory.get("is_healthy", False),
         confidence=round(confidence_val, 4),
+        confidence_percentage=pct_str,
+        confidence_assessment=conf_assessment["level"],
+        confidence_note=conf_assessment["note"],
         model_name="MobileNetV3-Large Disease Classifier",
         remedy_recommendation=remedy,
+        organic_treatment=advisory.get("organic_treatment"),
+        chemical_treatment=advisory.get("chemical_treatment"),
+        general_care=advisory.get("general_care"),
+        selected_crop_conflict=has_conflict,
+        selected_crop_conflict_warning=conflict_warning,
+        supported_crops=SUPPORTED_CROPS,
+        disclaimer=(
+            "AI leaf detection provides visual pattern guidance and is not a guaranteed diagnosis. "
+            "Always inspect crops in person, follow product label directions, and consult your local "
+            "agricultural extension officer before applying chemical treatments."
+        ),
     )
 

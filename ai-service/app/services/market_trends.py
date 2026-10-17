@@ -199,13 +199,13 @@ class MarketTrendsService:
             active_market = "Pune" if "Pune" in markets else (markets[0] if markets else "Pune")
 
             # 5. Date Range across dataset using fast index lookup
-            cur.execute("SELECT arrival_date FROM market_prices ORDER BY arrival_date ASC LIMIT 1")
-            r_min = cur.fetchone()
-            min_date = r_min["arrival_date"] if r_min and r_min["arrival_date"] else "2025-01-01"
-
-            cur.execute("SELECT arrival_date FROM market_prices ORDER BY arrival_date DESC LIMIT 1")
-            r_max = cur.fetchone()
-            max_date = r_max["arrival_date"] if r_max and r_max["arrival_date"] else "2025-12-30"
+            cur.execute(
+                "SELECT MIN(arrival_date), MAX(arrival_date) FROM market_prices WHERE commodity = ?",
+                (active_commodity,),
+            )
+            r_dates = cur.fetchone()
+            min_date = r_dates[0] if r_dates and r_dates[0] else "2025-01-01"
+            max_date = r_dates[1] if r_dates and r_dates[1] else "2025-12-30"
 
             result = MarketFilterOptionsResponse(
                 commodities=ordered_commodities,
@@ -306,6 +306,21 @@ class MarketTrendsService:
                     (clean_commodity, resolved_market),
                 )
                 m_match = cur.fetchone()
+                if not m_match:
+                    # Fuzzy match e.g. "Hosur" matches "Hosur (Uzhavar Sandhai )"
+                    if resolved_state:
+                        cur.execute(
+                            "SELECT market, state, district FROM market_prices WHERE commodity = ? AND state = ? AND LOWER(market) LIKE LOWER(?) LIMIT 1",
+                            (clean_commodity, resolved_state, f"%{resolved_market}%"),
+                        )
+                        m_match = cur.fetchone()
+                    if not m_match:
+                        cur.execute(
+                            "SELECT market, state, district FROM market_prices WHERE commodity = ? AND LOWER(market) LIKE LOWER(?) LIMIT 1",
+                            (clean_commodity, f"%{resolved_market}%"),
+                        )
+                        m_match = cur.fetchone()
+
                 if m_match:
                     resolved_market = m_match["market"]
                     if not resolved_state and m_match["state"]:

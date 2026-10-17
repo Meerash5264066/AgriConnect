@@ -23,7 +23,6 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @ApiTags('AI')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
 @Controller('ai')
 export class AiController {
   constructor(private readonly aiService: AiService) {}
@@ -174,5 +173,45 @@ export class AiController {
   getMarketTrends(@Query() query: MarketTrendsQueryDto) {
     return this.aiService.getMarketTrends(query);
   }
-}
 
+  @UseGuards(JwtAuthGuard)
+  @Post('chat')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Chat with Farmer Agronomist Assistant',
+    description:
+      'Context-aware agronomist answers for diagnosed crop conditions or general farming inquiries.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Agronomist response successfully generated.',
+  })
+  @ApiResponse({
+    status: 502,
+    description: 'AI microservice is unreachable.',
+  })
+  @ApiResponse({
+    status: 504,
+    description: 'AI microservice request timed out.',
+  })
+  chatWithAgronomist(@Body() body: any) {
+    return this.aiService.chatWithAgronomist(body);
+  }
+
+  @Get('mandi-ticker')
+  @ApiOperation({
+    summary: 'Retrieve expanded APMC mandi price ticker records',
+    description:
+      'Queries verified APMC daily arrival prices across 30+ commodities in ₹/kg with freshness disclosures.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Expanded APMC mandi price ticker records successfully returned.',
+  })
+  getMandiTicker(
+    @Query('state') state?: string,
+    @Query('refresh') refresh?: string,
+  ) {
+    return this.aiService.getMandiTicker(state, refresh === 'true');
+  }
+}

@@ -71,6 +71,9 @@ describe('ProcurementService', () => {
       crop: {
         findMany: jest.fn().mockResolvedValue([mockFarmer1Crop, mockFarmer2Crop]),
       },
+      contract: {
+        findFirst: jest.fn().mockResolvedValue(null),
+      },
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -136,6 +139,46 @@ describe('ProcurementService', () => {
       expect(result.totalMatchedKg).toBe(5500);
       expect(result.isFullyMatched).toBe(false);
       expect(result.shortfallKg).toBe(1500);
+    });
+  });
+
+  describe('deleteDemand', () => {
+    it('cancels procurement demand by marking isActive false', async () => {
+      const result = await service.deleteDemand('user-buyer-1', 'demand-1');
+      expect(result.isActive).toBe(false);
+      expect(prisma.procurementDemand.update).toHaveBeenCalledWith({
+        where: { id: 'demand-1' },
+        data: { isActive: false },
+      });
+    });
+
+    it('throws ForbiddenException if buyer does not own the demand', async () => {
+      prisma.buyer.findUnique.mockResolvedValueOnce({ id: 'buyer-intruder' });
+      await expect(service.deleteDemand('user-buyer-intruder', 'demand-1')).rejects.toThrow(
+        ForbiddenException,
+      );
+    });
+
+    it('throws BadRequestException if requirement is already cancelled', async () => {
+      prisma.procurementDemand.findUnique.mockResolvedValueOnce({
+        ...mockDemand,
+        isActive: false,
+      });
+      await expect(service.deleteDemand('user-buyer-1', 'demand-1')).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('throws BadRequestException if there is an active ongoing contract with remaining deliveries', async () => {
+      prisma.contract.findFirst.mockResolvedValueOnce({
+        id: 'contract-active-1',
+        quantityKg: 5000,
+        status: 'ACTIVE',
+        supplies: [{ actualQty: 1000 }],
+      });
+      await expect(service.deleteDemand('user-buyer-1', 'demand-1')).rejects.toThrow(
+        BadRequestException,
+      );
     });
   });
 });

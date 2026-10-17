@@ -287,9 +287,67 @@ class DiseaseDetectionResponse(BaseModel):
     predicted_class: str = Field(..., description="Full class label identified by the classifier (e.g. 'Tomato___Tomato Early blight')", examples=["Tomato___Tomato Early blight"])
     crop: str = Field(..., description="Identified or provided crop type", examples=["Tomato"])
     disease: str = Field(..., description="Detected plant disease or 'Healthy'", examples=["Tomato Early blight"])
+    is_healthy: bool = Field(default=False, description="True if foliage shows no disease pathology")
     confidence: float = Field(..., ge=0.0, le=1.0, description="Model prediction confidence score", examples=[0.9452])
+    confidence_percentage: str = Field(default="0.0%", description="Formatted percentage string of model confidence")
+    confidence_assessment: str = Field(default="moderate", description="'high', 'moderate', or 'low'")
+    confidence_note: str = Field(default="", description="Contextual note on confidence level and whether second opinion is advised")
     model_name: str = Field(default="MobileNetV3-Large Disease Classifier", description="Vision classifier model name")
     remedy_recommendation: Optional[str] = Field(None, description="Recommended agronomic remedy or treatment")
+    organic_treatment: Optional[str] = Field(None, description="Natural care and organic remedies")
+    chemical_treatment: Optional[str] = Field(None, description="Plant medicine / chemical treatment with label precaution")
+    general_care: Optional[str] = Field(None, description="Preventative cultural care and field hygiene")
+    selected_crop_conflict: bool = Field(default=False, description="True if user selected crop conflicts with model predicted crop")
+    selected_crop_conflict_warning: Optional[str] = Field(None, description="Detailed conflict explanation if crops differ")
+    supported_crops: List[str] = Field(default_factory=list, description="List of crops recognized by the vision model")
+    disclaimer: str = Field(
+        default=(
+            "AI leaf detection provides visual pattern guidance and is not a guaranteed diagnosis. "
+            "Always inspect crops in person, follow product label directions, and consult your local "
+            "agricultural extension officer before applying chemical treatments."
+        ),
+        description="Farmer advisory disclaimer",
+    )
+
+
+# --- Phase D: Farmer Agronomist Chatbot Schemas ---
+
+class DiagnosisContext(BaseModel):
+    """Contextual diagnosis details passed from the current leaf analysis session."""
+    crop: Optional[str] = Field(None, description="Predicted or selected crop")
+    disease: Optional[str] = Field(None, description="Predicted disease condition")
+    predicted_class: Optional[str] = Field(None, description="Full model class label")
+    confidence: Optional[float] = Field(None, description="Model confidence score")
+    confidence_assessment: Optional[str] = Field(None, description="'high', 'moderate', or 'low'")
+    selected_crop: Optional[str] = Field(None, description="Crop chosen in dropdown by farmer")
+    selected_symptom: Optional[str] = Field(None, description="Symptom chosen in dropdown by farmer")
+    remedy_recommendation: Optional[str] = Field(None, description="Primary treatment recommendation")
+    organic_treatment: Optional[str] = Field(None, description="Natural care guidelines")
+    chemical_treatment: Optional[str] = Field(None, description="Plant medicine guidelines")
+    general_care: Optional[str] = Field(None, description="Cultural care guidelines")
+    session_id: Optional[str] = Field(None, description="Safe anonymous session identifier")
+
+
+class ChatRequest(BaseModel):
+    """Farmer chat question request schema."""
+    message: str = Field(..., min_length=1, max_length=1000, description="Farmer's question or message")
+    diagnosis_context: Optional[DiagnosisContext] = Field(None, description="Active leaf diagnosis session context")
+    conversation_history: Optional[List[Dict[str, str]]] = Field(
+        default=None,
+        description="Prior conversation turns [{'role': 'user'|'assistant', 'content': '...'}]",
+    )
+
+
+class ChatResponse(BaseModel):
+    """Farmer chat assistant response schema."""
+    reply: str = Field(..., description="Assistant reply in farmer-friendly language")
+    source: str = Field(default="verified_agronomic_engine", description="'verified_agronomic_engine' or 'llm'")
+    context_used: Optional[Dict[str, Any]] = Field(None, description="Diagnosis context attributes utilized")
+    suggested_questions: List[str] = Field(
+        default_factory=list,
+        description="Suggested follow-up questions tailored to current diagnosis or topic",
+    )
+
 
 
 # --- Phase 13: Market Trend Analysis Schemas ---

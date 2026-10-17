@@ -1,7 +1,7 @@
 """Crop recommendation endpoint routes."""
 
 import logging
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, File, HTTPException, UploadFile, status
 from app.schemas.common import CropRecommendationRequest, ErrorResponse
 from app.services.model_registry import get_model_registry, ModelNotAvailableError
 
@@ -80,3 +80,80 @@ async def recommend_crop(request: CropRecommendationRequest):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Inference failed during crop recommendation.",
         )
+
+
+@router.post(
+    "/parse-soil-report",
+    summary="Parse Uploaded Soil Laboratory Test Report",
+    description=(
+        "Extracts soil nutrient parameters (N, P, K, pH), secondary metrics (Organic Carbon, EC, Texture), "
+        "and laboratory metadata from text-based PDFs, scanned PDFs, or JPG/PNG images. "
+        "Normalizes extracted nutrient values to kg/ha and flags any missing required inputs for farmer review."
+    ),
+    responses={
+        status.HTTP_200_OK: {
+            "description": "Soil laboratory report analyzed and values extracted successfully.",
+        },
+        status.HTTP_400_BAD_REQUEST: {
+            "description": "Unsupported file format or password-protected PDF document.",
+        },
+        status.HTTP_413_REQUEST_ENTITY_TOO_LARGE: {
+            "description": "Uploaded file exceeds 10 MB maximum size limit.",
+        },
+        status.HTTP_422_UNPROCESSABLE_ENTITY: {
+            "description": "File is empty, corrupted, or unreadable.",
+        },
+    },
+)
+async def parse_soil_report(file: UploadFile = File(...)):
+    """Receive uploaded soil test report, extract laboratory parameters, and normalize units."""
+    from app.services.soil_report_parser import (
+        get_soil_report_parser,
+        InvalidFileTypeError,
+        FileSizeExceededError,
+        PasswordProtectedPDFError,
+        CorruptReportFileError,
+    )
+
+    parser = get_soil_report_parser()
+
+    try:
+        file_bytes = await file.read()
+        return parser.parse_soil_report(
+            file_bytes=file_bytes,
+            filename=file.filename or "soil_report.pdf",
+            content_type=file.content_type,
+        )
+
+    except InvalidFileTypeError as err:
+        logger.warning("Soil report validation rejected: %s", err)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"message": str(err), "error_code": "INVALID_FILE_TYPE"},
+        )
+    except PasswordProtectedPDFError as err:
+        logger.warning("Password protected soil report rejected: %s", err)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"message": str(err), "error_code": "PASSWORD_PROTECTED_PDF"},
+        )
+    except FileSizeExceededError as err:
+        logger.warning("Soil report size exceeded: %s", err)
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail={"message": str(err), "error_code": "FILE_SIZE_EXCEEDED"},
+        )
+    except CorruptReportFileError as err:
+        logger.warning("Unreadable or corrupt soil report rejected: %s", err)
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"message": str(err), "error_code": "CORRUPT_REPORT_FILE"},
+        )
+    except Exception as exc:
+        logger.error("Unexpected error parsing soil report: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"message": f"Server encountered an error while processing the soil report: {exc}"},
+        )
+    finally:
+        await file.close()

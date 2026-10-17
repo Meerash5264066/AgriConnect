@@ -2,7 +2,13 @@
   "name": "agriconnect",
   "private": true,
   "scripts": {
+    "dev": "concurrently -n \"AI,BACKEND,FRONTEND\" -c \"magenta,blue,green\" \"npm run ai\" \"npm run backend\" \"npm run frontend\"",
+    "start": "npm run dev",
+    "ai": "node scripts/start-ai.js",
     "frontend": "npm --prefix frontend run dev",
     "backend": "npm --prefix backend run start:dev"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.6"
   }
 }

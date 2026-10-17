@@ -116,7 +116,33 @@ export class ProcurementService {
     const demand = await this.prisma.procurementDemand.findUnique({ where: { id } });
     if (!demand) throw new NotFoundException(`Procurement demand #${id} not found`);
     if (demand.buyerId !== buyer.id) {
-      throw new ForbiddenException('You do not have permission to delete this demand');
+      throw new ForbiddenException('You do not have permission to cancel this demand');
+    }
+
+    if (!demand.isActive) {
+      throw new BadRequestException('This purchase requirement has already been cancelled');
+    }
+
+    // Business rule: Verify if an incompatible active contract is ongoing
+    if (this.prisma.contract && typeof this.prisma.contract.findFirst === 'function') {
+      const activeContract = await this.prisma.contract.findFirst({
+        where: {
+          buyerId: buyer.id,
+          cropName: { equals: demand.cropName, mode: 'insensitive' },
+          status: { in: ['ACTIVE', 'ACCEPTED'] },
+        },
+        include: { supplies: true },
+      });
+      if (activeContract) {
+        const supplies = activeContract.supplies || [];
+        const totalSupplied = supplies.reduce((sum: number, s: any) => sum + (s.actualQty || 0), 0);
+        const remaining = Math.max(0, (activeContract.quantityKg || 0) - totalSupplied);
+        if (remaining > 0) {
+          throw new BadRequestException(
+            `Cannot cancel requirement: Active contract #${activeContract.id.substring(0, 8)} is currently ongoing for ${demand.cropName} (${remaining.toLocaleString()} kg remaining to supply). Fulfill or close the active contract first.`
+          );
+        }
+      }
     }
 
     return this.prisma.procurementDemand.update({

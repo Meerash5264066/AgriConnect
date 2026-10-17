@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Put,
+  Patch,
   Delete,
   Param,
   Body,
@@ -70,6 +71,18 @@ export class ProcurementController {
   @UseGuards(JwtAuthGuard)
   @Delete(':id')
   deleteDemand(@Request() req: any, @Param('id') id: string) {
+    return this.procurementService.deleteDemand(req.user.sub, id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch(':id/cancel')
+  cancelDemandPatch(@Request() req: any, @Param('id') id: string) {
+    return this.procurementService.deleteDemand(req.user.sub, id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/cancel')
+  cancelDemandPost(@Request() req: any, @Param('id') id: string) {
     return this.procurementService.deleteDemand(req.user.sub, id);
   }
 }
