@@ -2328,10 +2328,14 @@
                                     <option value="Onion">Onion</option>
                                     <option value="Potato">Potato</option>
                                     <option value="Wheat">Wheat</option>
+                                    <option value="Rice">Rice</option>
                                     <option value="Brinjal">Brinjal (Eggplant)</option>
                                     <option value="Green Chilli">Green Chilli</option>
-                                    <option value="Banana">Banana</option>
+                                    <option value="Cauliflower">Cauliflower</option>
                                     <option value="Cabbage">Cabbage</option>
+                                    <option value="Banana">Banana</option>
+                                    <option value="Apple">Apple</option>
+                                    <option value="Maize">Maize</option>
                                 </select>
                             </div>
 
@@ -8975,6 +8979,11 @@
                 if (window.NEXT_PUBLIC_AI_URL) return window.NEXT_PUBLIC_AI_URL.replace(/\/$/, '');
                 if (window.__ENV__ && window.__ENV__.NEXT_PUBLIC_AI_URL) return window.__ENV__.NEXT_PUBLIC_AI_URL.replace(/\/$/, '');
                 try {
+                    if (window.parent && window.parent !== window && window.parent.NEXT_PUBLIC_AI_URL) {
+                        return window.parent.NEXT_PUBLIC_AI_URL.replace(/\/$/, '');
+                    }
+                } catch (e) {}
+                try {
                     const stored = localStorage.getItem('agriconnect_ai_url');
                     if (stored) return stored.replace(/\/$/, '');
                 } catch (e) {}
@@ -10765,10 +10774,30 @@ startxref
             }
 
             // Direct FastAPI AI service fallback (/ai/market-trends -> /api/v1/market-trends)
-            const aiHost = (window.location && window.location.hostname && window.location.hostname !== 'file:') ? window.location.hostname : '127.0.0.1';
+            const aiBase = (typeof getAiServiceBaseUrl === 'function') ? getAiServiceBaseUrl() : 'http://127.0.0.1:8000';
             const aiPath = endpointPath.replace(/^\/ai\/market-trends/, '/api/v1/market-trends');
-            baseUrls.push({ url: `http://${aiHost}:8000${aiPath}`, type: 'ai' });
-            baseUrls.push({ url: `http://localhost:8000${aiPath}`, type: 'ai' });
+            const cleanAiBase = aiBase.replace(/\/+$/, '');
+            const directAiUrl = cleanAiBase.endsWith('/api/v1')
+                ? `${cleanAiBase}${endpointPath.replace(/^\/ai\/market-trends/, '')}`
+                : `${cleanAiBase}${aiPath}`;
+
+            baseUrls.push({ url: directAiUrl, type: 'ai' });
+
+            // Alternate loopback host for local AI service if configured with localhost/127.0.0.1
+            if (cleanAiBase.includes('localhost')) {
+                baseUrls.push({ url: cleanAiBase.replace('localhost', '127.0.0.1') + (cleanAiBase.endsWith('/api/v1') ? endpointPath.replace(/^\/ai\/market-trends/, '') : aiPath), type: 'ai' });
+            } else if (cleanAiBase.includes('127.0.0.1')) {
+                baseUrls.push({ url: cleanAiBase.replace('127.0.0.1', 'localhost') + (cleanAiBase.endsWith('/api/v1') ? endpointPath.replace(/^\/ai\/market-trends/, '') : aiPath), type: 'ai' });
+            } else {
+                baseUrls.push({ url: `http://127.0.0.1:8000${aiPath}`, type: 'ai' });
+                baseUrls.push({ url: `http://localhost:8000${aiPath}`, type: 'ai' });
+            }
+
+            // Deployed Render AI service fallback
+            const deployedRenderUrl = `https://agriconnect-ai-service.onrender.com${aiPath}`;
+            if (!baseUrls.some(b => b.url === deployedRenderUrl)) {
+                baseUrls.push({ url: deployedRenderUrl, type: 'ai' });
+            }
 
             let lastError = null;
             for (const item of baseUrls) {
@@ -11175,6 +11204,11 @@ startxref
             if (typeof window !== 'undefined') {
                 if (window.NEXT_PUBLIC_API_URL) return window.NEXT_PUBLIC_API_URL.replace(/\/$/, '');
                 if (window.__ENV__ && window.__ENV__.NEXT_PUBLIC_API_URL) return window.__ENV__.NEXT_PUBLIC_API_URL.replace(/\/$/, '');
+                try {
+                    if (window.parent && window.parent !== window && window.parent.NEXT_PUBLIC_API_URL) {
+                        return window.parent.NEXT_PUBLIC_API_URL.replace(/\/$/, '');
+                    }
+                } catch (e) {}
                 try {
                     const stored = localStorage.getItem('agriconnect_api_url');
                     if (stored) return stored.replace(/\/$/, '');
