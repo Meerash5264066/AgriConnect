@@ -32,6 +32,8 @@ htmlcov/
 # Large dataset files exceeding GitHub 100MB file limit (1.63GB and 573MB)
 datasets/price/price_trends.sqlite
 datasets/price/agriconnect_prices_2025_clean.csv
+datasets/price/price_trends_compact.sqlite
+datasets/price/price_trends_compact.sqlite.gz
 
 # Temporary & uploaded files
 temp/

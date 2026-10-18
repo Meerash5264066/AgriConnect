@@ -1,30 +1,66 @@
 #!/usr/bin/env python3
 """Agricultural Market Price Trends Dataset Download and Verification Tool.
 
-Used during Render builds or local setup to ensure the 1.63 GB SQLite database
+Used during Render builds or local setup to ensure the SQLite database
 index 'price_trends.sqlite' is present and valid.
+
+Supports both direct SQLite database files and gzip-compressed (.gz) archives.
 
 Usage:
     python scripts/download_price_trends.py [--target-dir DIR] [--url URL] [--strict]
 """
 
 import argparse
+import gzip
 import os
 import sys
 import urllib.request
 from pathlib import Path
 
 SQLITE_HEADER = b"SQLite format 3\x00"
-EXPECTED_MIN_BYTES = 500 * 1024 * 1024  # At least 500MB (full DB is ~1.63 GB)
+GZIP_HEADER = b"\x1f\x8b"
+EXPECTED_MIN_BYTES = 10 * 1024 * 1024  # At least 10MB (compact DB is ~409 MB, full DB is ~1.63 GB)
 
 
-def verify_sqlite_file(file_path: Path) -> bool:
-    """Verify that file exists, is non-empty, and has valid SQLite 3 header."""
+def is_gzip_file(file_path: Path) -> bool:
+    """Check if file exists and starts with gzip magic bytes."""
+    if not file_path.is_file() or file_path.stat().st_size < 2:
+        return False
+    try:
+        with open(file_path, "rb") as f:
+            return f.read(2) == GZIP_HEADER
+    except Exception:
+        return False
+
+
+def decompress_gzip_file(src_path: Path, dest_path: Path) -> bool:
+    """Stream decompress gzip archive into target path."""
+    try:
+        with gzip.open(src_path, "rb") as f_in, open(dest_path, "wb") as f_out:
+            chunk_size = 1024 * 1024  # 1MB chunks
+            while True:
+                chunk = f_in.read(chunk_size)
+                if not chunk:
+                    break
+                f_out.write(chunk)
+        return True
+    except Exception as exc:
+        print(f"[Price Trends Setup] ERROR: Gzip decompression failed: {exc}")
+        if dest_path.exists():
+            try:
+                dest_path.unlink()
+            except Exception:
+                pass
+        return False
+
+
+def verify_sqlite_file(file_path: Path, min_bytes: int = 1024) -> bool:
+    """Verify that file exists, meets minimum size, and has valid SQLite 3 header."""
     if not file_path.is_file():
         return False
     try:
         size = file_path.stat().st_size
-        if size < 1024:
+        if size < min_bytes:
             return False
         with open(file_path, "rb") as f:
             header = f.read(16)
@@ -34,8 +70,8 @@ def verify_sqlite_file(file_path: Path) -> bool:
         return False
 
 
-def find_existing_db(target_dir: Path) -> Path | None:
-    """Check standard locations for existing price_trends.sqlite."""
+def find_existing_db(target_dir: Path, min_bytes: int = 1024) -> Path | None:
+    """Check standard locations for existing valid price_trends.sqlite."""
     candidates = [
         target_dir / "price_trends.sqlite",
         Path("datasets/price/price_trends.sqlite"),
@@ -52,14 +88,24 @@ def find_existing_db(target_dir: Path) -> Path | None:
         candidates.insert(0, Path(env_path).resolve())
 
     for c in candidates:
-        if c.is_file() and verify_sqlite_file(c):
+        if c.is_file() and verify_sqlite_file(c, min_bytes=min_bytes):
             return c
     return None
 
 
-def download_file(url: str, dest_path: Path) -> bool:
-    """Stream download file from url with progress indicator."""
-    tmp_path = dest_path.with_suffix(".tmp")
+def download_file(url: str, dest_path: Path, min_bytes: int = EXPECTED_MIN_BYTES) -> bool:
+    """Stream download file from url with progress indicator and optional gzip decompression."""
+    tmp_download = dest_path.with_suffix(".download.tmp")
+    tmp_extracted = dest_path.with_suffix(".extracted.tmp")
+
+    # Clean up any stale temp files before starting
+    for p in (tmp_download, tmp_extracted):
+        if p.exists():
+            try:
+                p.unlink()
+            except Exception:
+                pass
+
     print(f"[Price Trends Setup] Downloading database from:\n  {url}\nTo:\n  {dest_path}")
     dest_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -68,9 +114,13 @@ def download_file(url: str, dest_path: Path) -> bool:
             url,
             headers={"User-Agent": "AgriConnect-Deployment/1.0"},
         )
-        with urllib.request.urlopen(req) as response, open(tmp_path, "wb") as out_file:
-            total_size = response.getheader("Content-Length")
-            total_bytes = int(total_size) if total_size and total_size.isdigit() else None
+        with urllib.request.urlopen(req) as response, open(tmp_download, "wb") as out_file:
+            total_size = None
+            if hasattr(response, "getheader"):
+                total_size = response.getheader("Content-Length")
+            elif hasattr(response, "headers") and response.headers:
+                total_size = response.headers.get("Content-Length")
+            total_bytes = int(total_size) if total_size and str(total_size).isdigit() else None
             downloaded = 0
             chunk_size = 1024 * 1024  # 1MB chunks
             last_percent = -1
@@ -90,25 +140,59 @@ def download_file(url: str, dest_path: Path) -> bool:
                     if downloaded % (50 * 1024 * 1024) == 0:
                         print(f"[Price Trends Setup] Downloaded: {downloaded / (1024*1024):.1f} MB")
 
-        # Verify downloaded file header
-        if not verify_sqlite_file(tmp_path):
-            print("[Price Trends Setup] ERROR: Downloaded file is not a valid SQLite database (header mismatch).")
-            if tmp_path.exists():
-                tmp_path.unlink()
+        # Determine whether payload is a gzip archive
+        is_gz = is_gzip_file(tmp_download) or url.lower().split("?")[0].endswith(".gz")
+        if is_gz:
+            print("[Price Trends Setup] Detected gzip compressed payload. Decompressing to SQLite database...")
+            ok = decompress_gzip_file(tmp_download, tmp_extracted)
+            if not ok:
+                print("[Price Trends Setup] ERROR: Decompression of gzip archive failed.")
+                for p in (tmp_download, tmp_extracted):
+                    if p.exists():
+                        try:
+                            p.unlink()
+                        except Exception:
+                            pass
+                return False
+            validation_target = tmp_extracted
+        else:
+            validation_target = tmp_download
+
+        # Verify uncompressed SQLite database header and size
+        if not verify_sqlite_file(validation_target, min_bytes=min_bytes):
+            print("[Price Trends Setup] ERROR: Resulting file is not a valid SQLite database (header mismatch or size below threshold).")
+            for p in (tmp_download, tmp_extracted):
+                if p.exists():
+                    try:
+                        p.unlink()
+                    except Exception:
+                        pass
             return False
 
-        # Atomically rename
+        # Atomically replace destination
         if dest_path.exists():
             dest_path.unlink()
-        tmp_path.rename(dest_path)
+        validation_target.rename(dest_path)
+
+        # Clean up download temp file
+        if tmp_download.exists():
+            try:
+                tmp_download.unlink()
+            except Exception:
+                pass
+
         size_mb = dest_path.stat().st_size / (1024 * 1024)
-        print(f"[Price Trends Setup] SUCCESS: Downloaded and verified price_trends.sqlite ({size_mb:.2f} MB).")
+        print(f"[Price Trends Setup] SUCCESS: Downloaded, extracted, and verified {dest_path.name} ({size_mb:.2f} MB).")
         return True
 
     except Exception as exc:
         print(f"[Price Trends Setup] ERROR: Download failed: {exc}")
-        if tmp_path.exists():
-            tmp_path.unlink()
+        for p in (tmp_download, tmp_extracted):
+            if p.exists():
+                try:
+                    p.unlink()
+                except Exception:
+                    pass
         return False
 
 
@@ -124,7 +208,13 @@ def main() -> int:
         "--url",
         type=str,
         default=os.environ.get("PRICE_TRENDS_DOWNLOAD_URL"),
-        help="Download URL if file is not already present",
+        help="Download URL if file is not already present (supports direct SQLite or .gz archive)",
+    )
+    parser.add_argument(
+        "--min-bytes",
+        type=int,
+        default=EXPECTED_MIN_BYTES,
+        help="Minimum expected uncompressed SQLite file size in bytes (default: 10MB)",
     )
     parser.add_argument(
         "--strict",
@@ -134,7 +224,7 @@ def main() -> int:
     args = parser.parse_args()
 
     # Step 1: Check if already present anywhere
-    existing = find_existing_db(args.target_dir)
+    existing = find_existing_db(args.target_dir, min_bytes=args.min_bytes)
     if existing:
         size_mb = existing.stat().st_size / (1024 * 1024)
         print(f"[Price Trends Setup] OK: Verified existing database at {existing} ({size_mb:.2f} MB).")
@@ -143,20 +233,20 @@ def main() -> int:
     # Step 2: Try download if URL is configured
     target_file = args.target_dir / "price_trends.sqlite"
     if args.url:
-        ok = download_file(args.url, target_file)
+        ok = download_file(args.url, target_file, min_bytes=args.min_bytes)
         return 0 if ok else 1
 
     # Step 3: Missing and no URL provided
     print("[Price Trends Setup] NOTICE: 'price_trends.sqlite' was not found.")
-    print("  File size: ~1.63 GB (5.8 million APMC arrival records).")
+    print("  File size: ~409 MB compact (12 staples) or ~1.63 GB full (338 commodities).")
     print("  Because it exceeds GitHub's 100MB limit, it is not checked into Git.")
     print("\nTo provide this file on Render:")
-    print("  1. Option A (Render Persistent Disk):")
+    print("  1. Option A (Render Persistent Disk - Paid Plan):")
     print("     - Add a Persistent Disk mounted at '/var/data'.")
     print("     - Copy 'price_trends.sqlite' to '/var/data/price_trends.sqlite'.")
     print("     - Set environment variable: PRICE_TRENDS_DB_PATH=/var/data/price_trends.sqlite")
-    print("  2. Option B (Cloud Storage / GitHub Release):")
-    print("     - Upload 'price_trends.sqlite' to a release or S3/R2 bucket.")
+    print("  2. Option B (GitHub Release Asset - Free Plan):")
+    print("     - Upload 'price_trends_compact.sqlite.gz' as a GitHub Release asset.")
     print("     - Set environment variable: PRICE_TRENDS_DOWNLOAD_URL=<direct_download_url>")
     print("     - Add to Render Build Command: python scripts/download_price_trends.py\n")
 
@@ -169,3 +259,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
