@@ -37,7 +37,27 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Ensure local directory scaffolding exists
     settings.model_path.mkdir(parents=True, exist_ok=True)
     settings.dataset_path.mkdir(parents=True, exist_ok=True)
+    (settings.dataset_path / "price").mkdir(parents=True, exist_ok=True)
     
+    # Check market price trends database index status
+    from app.services.market_trends import get_market_trends_service
+    trends_service = get_market_trends_service()
+    trends_db_status = trends_service.get_database_status()
+    if trends_db_status["available"]:
+        logger.info(
+            "Market price trends database verified at %s (%.2f MB)",
+            trends_db_status["resolved_path"],
+            trends_db_status["size_mb"],
+        )
+    else:
+        logger.warning(
+            "Market price trends database 'price_trends.sqlite' NOT found. "
+            "Checked locations: %s. "
+            "Market trends queries will return HTTP 503 until provided. "
+            "Mount a Render Persistent Disk or set PRICE_TRENDS_DB_PATH.",
+            trends_db_status["checked_locations"],
+        )
+
     logger.info("AI Service foundation started successfully. Model directory: %s", settings.model_path)
     yield
     logger.info("Shutting down %s", settings.APP_NAME)

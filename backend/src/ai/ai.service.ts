@@ -349,7 +349,7 @@ export class AiService {
       case HttpStatus.SERVICE_UNAVAILABLE: // 503
       case HttpStatus.BAD_GATEWAY: // 502
         throw new BadGatewayException(
-          'AI microservice is currently unavailable.',
+          typeof detail === 'object' ? detail : errorMessage,
         );
 
       default:

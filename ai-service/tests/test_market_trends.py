@@ -194,3 +194,25 @@ def test_zero_or_none_previous_price_handled_safely():
     assert pct == 0.0
     assert not (pct != pct)  # not NaN
     assert pct != float("inf")
+
+
+def test_market_trends_missing_dataset_returns_503(monkeypatch, tmp_path):
+    """Verify market trends endpoint returns HTTP 503 with detailed diagnostics when dataset is missing."""
+    from app.services.market_trends import MarketTrendsService
+    empty_service = MarketTrendsService(db_path=tmp_path / "nonexistent.sqlite")
+    monkeypatch.setattr("app.routes.market_trends.get_market_trends_service", lambda: empty_service)
+
+    response = client.get("/api/v1/market-trends?commodity=Tomato")
+    assert response.status_code == 503
+    data = response.json()
+    assert "detail" in data
+    assert data["detail"]["error_code"] == "DATASET_UNAVAILABLE"
+    assert data["detail"]["dataset"] == "price_trends.sqlite"
+    assert "checked_locations" in data["detail"]
+    assert len(data["detail"]["checked_locations"]) > 0
+
+    # Also test options endpoint returns 503 with structured error
+    resp_opts = client.get("/api/v1/market-trends/options")
+    assert resp_opts.status_code == 503
+    data_opts = resp_opts.json()
+    assert data_opts["detail"]["error_code"] == "DATASET_UNAVAILABLE"

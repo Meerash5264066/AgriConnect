@@ -153,6 +153,36 @@ cp .env.example .env
 | `MODEL_DIR` | `models` | Directory path containing trained model binaries |
 | `DATASET_DIR` | `datasets` | Directory path containing raw dataset files |
 | `MAX_UPLOAD_SIZE_MB` | `10` | Maximum allowed image upload size in MB |
+| `PRICE_TRENDS_DB_PATH` | `None` | Custom path to `price_trends.sqlite` (e.g. on Render Persistent Disk `/var/data/price_trends.sqlite`) |
+| `PRICE_TRENDS_DOWNLOAD_URL` | `None` | Download URL to fetch `price_trends.sqlite` during Render build |
+
+---
+
+## Market Trends Dataset Deployment (Render / Cloud)
+
+The historical APMC market trends database `price_trends.sqlite` contains **5,814,165 records** (~1.63 GB). Because it exceeds GitHub's 100 MB file limit, it is excluded from Git via `.gitignore`.
+
+To provide `price_trends.sqlite` on Render:
+
+### Option A: Render Persistent Disk (Recommended)
+1. In your Render Dashboard, add a **Persistent Disk** (e.g. 5 GB or 10 GB) with Mount Path `/var/data`.
+2. Copy `price_trends.sqlite` into `/var/data/price_trends.sqlite`.
+3. Set the Environment Variable:
+   ```
+   PRICE_TRENDS_DB_PATH=/var/data/price_trends.sqlite
+   ```
+   The service automatically detects and indexes this persistent location across restarts.
+
+### Option B: Cloud Storage / Release Asset Download
+1. Host `price_trends.sqlite` as a GitHub Release asset (supports up to 2 GB per file) or in an S3/R2 bucket.
+2. In your Render Environment Variables, set:
+   ```
+   PRICE_TRENDS_DOWNLOAD_URL=https://.../price_trends.sqlite
+   ```
+3. Update your Render Build Command:
+   ```bash
+   pip install -r requirements.txt && python scripts/download_price_trends.py
+   ```
 
 ---
 

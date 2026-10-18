@@ -50,8 +50,14 @@ async def get_filter_options(
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={
-                "message": "Market price dataset index is currently unavailable.",
+                "message": str(err),
                 "error_code": "DATASET_UNAVAILABLE",
+                "dataset": "price_trends.sqlite",
+                "checked_locations": getattr(err, "checked_paths", []),
+                "help": (
+                    "Price trends SQLite database is missing. On Render, mount a persistent disk "
+                    "or set the PRICE_TRENDS_DB_PATH environment variable."
+                ),
             },
         )
     except Exception as exc:
@@ -125,8 +131,14 @@ async def get_market_trends(
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail={
-                "message": "Market price dataset index is currently unavailable.",
+                "message": str(err),
                 "error_code": "DATASET_UNAVAILABLE",
+                "dataset": "price_trends.sqlite",
+                "checked_locations": getattr(err, "checked_paths", []),
+                "help": (
+                    "Price trends SQLite database is missing. On Render, mount a persistent disk "
+                    "or set the PRICE_TRENDS_DB_PATH environment variable."
+                ),
             },
         )
     except Exception as exc:

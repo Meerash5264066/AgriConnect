@@ -4,6 +4,7 @@ from fastapi import APIRouter
 from app.core.config import get_settings
 from app.schemas.common import HealthResponse, ReadinessResponse
 from app.services.model_registry import get_model_registry
+from app.services.market_trends import get_market_trends_service
 
 router = APIRouter(tags=["Health & Diagnostics"])
 
@@ -25,18 +26,24 @@ async def health_check() -> HealthResponse:
     summary="Readiness Check Probe",
     description=(
         "Verifies that the application is initialized and capable of receiving requests. "
-        "Reports individual machine learning model artifact readiness."
+        "Reports individual machine learning model artifact readiness and dataset diagnostics."
     ),
 )
 async def readiness_check() -> ReadinessResponse:
-    """Return readiness status including model training/availability status."""
+    """Return readiness status including model training/availability status and dataset diagnostics."""
     settings = get_settings()
     registry = get_model_registry()
     model_statuses = registry.get_all_models_status()
 
+    trends_service = get_market_trends_service()
+    trends_status = trends_service.get_database_status()
+
     return ReadinessResponse(
-        status="ready",
+        status="ready" if trends_status["available"] else "partially_ready",
         service="agriconnect-ai",
         version=settings.APP_VERSION,
         models=model_statuses,
+        datasets={
+            "price_trends": trends_status,
+        },
     )

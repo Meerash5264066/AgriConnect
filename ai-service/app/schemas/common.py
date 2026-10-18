@@ -31,6 +31,7 @@ class ReadinessResponse(BaseModel):
     service: str = Field(default="agriconnect-ai", description="Service identifier")
     version: str = Field(..., description="Service version")
     models: Dict[str, ModelStatusInfo] = Field(..., description="Model readiness dictionary")
+    datasets: Optional[Dict[str, Any]] = Field(default=None, description="Dataset readiness status")
     timestamp: str = Field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat(),
         description="ISO timestamp of the readiness check",

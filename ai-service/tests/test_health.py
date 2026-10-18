@@ -53,6 +53,26 @@ def test_readiness_endpoint():
     assert models["demand_prediction"]["artifact_found"] is True
     assert models["disease_detection"]["artifact_found"] is True
 
+    # Datasets readiness diagnostic
+    assert "datasets" in data
+    assert "price_trends" in data["datasets"]
+    assert data["datasets"]["price_trends"]["available"] is True
+    assert data["datasets"]["price_trends"]["size_mb"] > 0
+
+
+def test_readiness_when_dataset_missing(monkeypatch, tmp_path):
+    """Verify /ready reports partially_ready and diagnostic details when price_trends is missing."""
+    from app.services.market_trends import MarketTrendsService
+    empty_service = MarketTrendsService(db_path=tmp_path / "nonexistent.sqlite")
+    monkeypatch.setattr("app.routes.health.get_market_trends_service", lambda: empty_service)
+
+    response = client.get("/ready")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "partially_ready"
+    assert data["datasets"]["price_trends"]["available"] is False
+    assert "not found" in data["datasets"]["price_trends"]["message"].lower()
+
 
 
 

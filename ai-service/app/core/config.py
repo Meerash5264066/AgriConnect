@@ -2,7 +2,7 @@
 
 from functools import lru_cache
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     MODEL_DIR: str = "models"
     DATASET_DIR: str = "datasets"
     MAX_UPLOAD_SIZE_MB: int = 10
+
+    PRICE_TRENDS_DB_PATH: Optional[str] = None
+    PRICE_TRENDS_DOWNLOAD_URL: Optional[str] = None
 
     model_config = SettingsConfigDict(
         env_file=".env",

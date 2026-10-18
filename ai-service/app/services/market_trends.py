@@ -7,6 +7,7 @@ standardized trend classifications, peer market comparisons, and farmer insights
 
 import logging
 import math
+import os
 import sqlite3
 from datetime import datetime
 from pathlib import Path
@@ -47,7 +48,11 @@ class MarketTrendsServiceError(Exception):
 
 class DatasetUnavailableError(MarketTrendsServiceError):
     """Raised when the underlying price dataset or sqlite index is not found."""
-    pass
+
+    def __init__(self, message: str, checked_paths: Optional[List[str]] = None):
+        super().__init__(message)
+        self.message = message
+        self.checked_paths = checked_paths or []
 
 
 class InvalidFilterError(MarketTrendsServiceError):
@@ -64,30 +69,117 @@ class MarketTrendsService:
         self._options_cache: Dict[Tuple[Optional[str], Optional[str], Optional[str]], MarketFilterOptionsResponse] = {}
         self._all_commodities_cache: Optional[List[str]] = None
 
-    def resolve_db_path(self) -> Path:
-        """Resolve path to SQLite market price database index."""
-        if self._custom_db_path is not None:
-            if self._custom_db_path.is_file():
-                return self._custom_db_path
-            raise DatasetUnavailableError(f"Custom database not found at: {self._custom_db_path}")
-
+    def get_candidate_paths(self) -> List[Path]:
+        """Return list of candidate paths to search for price_trends.sqlite."""
         settings = get_settings()
         package_root = Path(__file__).resolve().parent.parent.parent
 
-        candidate_paths = [
-            settings.dataset_path / "price" / "price_trends.sqlite",
-            package_root / "datasets" / "price" / "price_trends.sqlite",
-            Path.cwd() / "datasets" / "price" / "price_trends.sqlite",
-            Path.cwd() / "ai-service" / "datasets" / "price" / "price_trends.sqlite",
-        ]
+        raw_candidates: List[Path] = []
+
+        if self._custom_db_path is not None:
+            raw_candidates.append(Path(self._custom_db_path))
+
+        env_db_path = settings.PRICE_TRENDS_DB_PATH or os.environ.get("PRICE_TRENDS_DB_PATH")
+        if env_db_path:
+            raw_candidates.append(Path(env_db_path).resolve())
+
+        raw_candidates.append(settings.dataset_path / "price" / "price_trends.sqlite")
+        raw_candidates.append(package_root / "datasets" / "price" / "price_trends.sqlite")
+        raw_candidates.append(package_root / "ai-service" / "datasets" / "price" / "price_trends.sqlite")
+        raw_candidates.append(Path.cwd() / "datasets" / "price" / "price_trends.sqlite")
+        raw_candidates.append(Path.cwd() / "ai-service" / "datasets" / "price" / "price_trends.sqlite")
+        raw_candidates.append(Path("/opt/render/project/src/ai-service/datasets/price/price_trends.sqlite"))
+        raw_candidates.append(Path("/opt/render/project/src/datasets/price/price_trends.sqlite"))
+        raw_candidates.append(Path("/var/data/price_trends.sqlite"))
+        raw_candidates.append(Path("/var/data/datasets/price/price_trends.sqlite"))
+        raw_candidates.append(Path("/data/price_trends.sqlite"))
+
+        seen = set()
+        deduped: List[Path] = []
+        for p in raw_candidates:
+            p_str = str(p)
+            if p_str not in seen:
+                seen.add(p_str)
+                deduped.append(p)
+
+        return deduped
+
+    def check_availability(self) -> Tuple[bool, Optional[Path], List[Path]]:
+        """Check if market trends SQLite index is present without raising an exception."""
+        if self._custom_db_path is not None:
+            p = Path(self._custom_db_path)
+            if p.is_file():
+                self._resolved_db_path = p
+                return True, p, [p]
+            return False, None, [p]
+
+        candidate_paths = self.get_candidate_paths()
+        for p in candidate_paths:
+            if p.is_file():
+                self._resolved_db_path = p
+                return True, p, candidate_paths
+        return False, None, candidate_paths
+
+    def get_database_status(self) -> Dict[str, Any]:
+        """Return diagnostic status of the price trends database."""
+        available, db_path, candidate_paths = self.check_availability()
+        checked_strs = [str(c) for c in candidate_paths]
+        if not available or db_path is None:
+            return {
+                "available": False,
+                "name": "price_trends.sqlite",
+                "resolved_path": None,
+                "size_bytes": 0,
+                "size_mb": 0.0,
+                "checked_locations": checked_strs,
+                "message": f"Price trends database index 'price_trends.sqlite' not found. Checked: {checked_strs}",
+            }
+
+        try:
+            size_bytes = db_path.stat().st_size
+            size_mb = round(size_bytes / (1024 * 1024), 2)
+            return {
+                "available": True,
+                "name": "price_trends.sqlite",
+                "resolved_path": str(db_path),
+                "size_bytes": size_bytes,
+                "size_mb": size_mb,
+                "checked_locations": checked_strs,
+                "message": "Market price trends database index is available and accessible.",
+            }
+        except Exception as exc:
+            return {
+                "available": False,
+                "name": "price_trends.sqlite",
+                "resolved_path": str(db_path),
+                "size_bytes": 0,
+                "size_mb": 0.0,
+                "checked_locations": checked_strs,
+                "message": f"Failed to access database at {db_path}: {exc}",
+            }
+
+    def resolve_db_path(self) -> Path:
+        """Resolve path to SQLite market price database index."""
+        if self._custom_db_path is not None:
+            p = Path(self._custom_db_path)
+            if p.is_file():
+                return p
+            raise DatasetUnavailableError(
+                f"Custom database not found at: {self._custom_db_path}",
+                checked_paths=[str(p)],
+            )
+
+        candidate_paths = self.get_candidate_paths()
 
         for p in candidate_paths:
             if p.is_file():
                 self._resolved_db_path = p
                 return p
 
+        checked_strs = [str(c) for c in candidate_paths]
         raise DatasetUnavailableError(
-            f"Price trends database index 'price_trends.sqlite' not found. Checked: {[str(c) for c in candidate_paths]}"
+            f"Price trends database index 'price_trends.sqlite' not found. Checked: {checked_strs}",
+            checked_paths=checked_strs,
         )
 
     def _get_connection(self) -> sqlite3.Connection:
